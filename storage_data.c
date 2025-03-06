@@ -22,7 +22,7 @@ value* create_copy_data(value* v) {
     new_v->values = wcalloc(count_tuples * sizeof(attr*));
 
     for (int i = 0; i < count_tuples; ++i) {
-        v->values[i] = wcalloc(count_fields * sizeof(attr));
+        new_v->values[i] = wcalloc(count_fields * sizeof(attr));
         for (int j = 0; j < count_fields; ++j ) {
             int column_name_size = strlen(v->values[i][j].column_name) + 1;
             attr* a = &(new_v->values[i][j]);
@@ -126,7 +126,6 @@ req_table* create_req_by_pg(PGresult* res, char* table) {
 
     req->count_tuples = PQntuples(res);
     req->count_fields = PQnfields(res);
-
     req->columns = wcalloc(req->count_tuples * sizeof(req_column*));
 
     for (int row = 0; row < req->count_tuples; ++row) {
@@ -162,7 +161,6 @@ req_table* create_req_by_pg(PGresult* res, char* table) {
             req->columns[row][column].data_size = value_size;
         }
     }
-
     return req;
 }
 

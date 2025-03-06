@@ -101,7 +101,6 @@ bool check_ttl(cache_data* data) {
     if (cur_time == -1) {
         char* err = strerror(errno);
         ereport(INFO, errmsg("get_cache: time error  %s", err));
-        abort();
     }
 
     if (cur_time - data->last_time > config.c_conf.ttl_s ) {
@@ -119,7 +118,6 @@ bool check_ttl(cache_data* data) {
 * If the data does not exist or its TTL has expired, it returns NULL.
 */
 value* get_cache(char* key, int key_size) {
-    ereport(INFO, errmsg("get_cache: START key %s", key));
     cache_basket* basket;
     cache_data* data;
     int err;
@@ -128,7 +126,6 @@ value* get_cache(char* key, int key_size) {
     result = NULL;
 
     basket = get_basket(key, key_size);
-    ereport(INFO, errmsg("get_cache: basket %p", basket));
     err = pthread_spin_lock(basket->lock);
     if (err != 0) {
         ereport(INFO, errmsg("get_cache: pthread_spin_lock %s", strerror(err)));
@@ -140,14 +137,12 @@ value* get_cache(char* key, int key_size) {
         result = create_copy_data(data->v);
     }
 
-    ereport(INFO, errmsg("get_cache: data %p", data));
     err = pthread_spin_unlock(basket->lock);
     if (err != 0) {
         ereport(INFO, errmsg("get_cache: pthread_spin_unlock %s", strerror(err)));
         abort();
     }
 
-    ereport(INFO, errmsg("get_cache: result %p", result));
     return result;
 }
 
@@ -157,7 +152,6 @@ value* get_cache(char* key, int key_size) {
 * If it does, the data is updated; if not, new data is added.
 */
 void set_cache(cache_data* new_data) {
-    ereport(INFO, errmsg("set_cache: START key %s key_size %d", new_data->key, new_data->key_size));
     cache_basket* basket;
     cache_data* data;
     int err;
@@ -187,7 +181,6 @@ void set_cache(cache_data* new_data) {
         data->v = new_data->v;
     }
 
-    ereport(INFO, errmsg("set_cache: basket %p data %p", basket, data));
     data->last_time = time(NULL);
     if (data->last_time == -1) {
         char* err = strerror(errno);
@@ -227,6 +220,11 @@ int delete_cache(char* key, int key_size) {
     }
 
     if (data == NULL) {
+        err = pthread_spin_unlock(basket->lock);
+        if (err != 0) {
+            ereport(INFO, errmsg("delete_cache: pthread_spin_unlock %s", strerror(err)));
+            abort();
+        }
         return 0;
     } else if (data == basket->first) {
         basket->first = data->next;
@@ -240,9 +238,9 @@ int delete_cache(char* key, int key_size) {
 
     free_data_from_cache(data);
 
-    err = pthread_spin_lock(basket->lock);
+    err = pthread_spin_unlock(basket->lock);
     if (err != 0) {
-        ereport(INFO, errmsg("delete_cache: pthread_spin_lock %s", strerror(err)));
+        ereport(INFO, errmsg("delete_cache: pthread_spin_unlock %s", strerror(err)));
         abort();
     }
 

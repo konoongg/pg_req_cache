@@ -292,8 +292,10 @@ not_status event_get_notify(e_notify* not) {
 }
 
 int create_ev_notify(wthread* wthrd) {
+    int err;
+
     wthrd->not = wcalloc(sizeof(e_notify));
-    int err = pipe(wthrd->not->pipe_fd);
+    err = pipe(wthrd->not->pipe_fd);
     if (err == -1) {
         ereport(INFO, errmsg("init_notify: pipe error %s", strerror(err)));
         abort();

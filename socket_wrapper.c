@@ -31,7 +31,6 @@ int socket_set_nonblock(int socket_fd) {
 
 //create listen tcp socket and return err ro fd thos socket
 int init_listen_socket(int listen_port, int backlog_size) {
-    //ereport(INFO, errmsg("init_listen_socket(): TEST tid: %d", gettid()));
     int err;
     const int val = 1;
     int listen_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);

@@ -39,8 +39,6 @@ void register_command(char* tabl, char* req, connection* conn, com_reason reason
     command_to_db* cmd = wcalloc(sizeof(command_to_db));
     int err;
 
-    ereport(INFO, errmsg("register_command: req %s", req));
-
     cmd->next = NULL;
     cmd->conn = conn;
     cmd->table = tabl;
@@ -141,7 +139,6 @@ proc_status process_read_db(connection* conn) {
     int err;
     req_table* req;
     db_oper_res res = read_from_db(back->conn_with_db, cmd->table, &req);
-
     if (res == READ_OPER_RES) {
         back->is_free = true;
         move_from_active_to_wait(conn);
@@ -163,6 +160,7 @@ proc_status process_read_db(connection* conn) {
         free_db_command(cmd);
 
         err = pthread_spin_lock(dbw.lock);
+
         if (err != 0) {
             ereport(INFO, errmsg("process_read_db: pthread_spin_lock %s", strerror(err)));
             abort();
@@ -181,6 +179,7 @@ proc_status process_read_db(connection* conn) {
         move_from_active_to_wait(conn);
         return WAIT_PROC;
     } else  if (res == ERR_OPER_RES) {
+        ereport(INFO, errmsg("process_read_db: res == ERR_OPER_RES"));
         abort();
     }
     return DEL_PROC;
@@ -200,7 +199,6 @@ proc_status notify_db(connection* conn) {
 
     not_status not_s = event_get_notify(conn->wthrd->not);
     if (not_s == NOT_TA) {
-        ereport(INFO, errmsg("notify_db: not_s == NOT_TA"));
         return ALIVE_PROC;
     }
 
@@ -237,19 +235,21 @@ cache_data* init_cache_data(char* key, int key_size, req_table* args) {
     data->v = wcalloc(sizeof(value));
     data->v->count_fields = args->count_fields;
     data->v->count_tuples = args->count_tuples;
+
     data->v->values = wcalloc(args->count_tuples * sizeof(attr*));
     for (int i = 0; i < args->count_tuples; ++i) {
         data->v->values[i] = wcalloc(args->count_fields * sizeof(attr));
-
         for (int j = 0; j < args->count_fields; ++j ) {
             int column_name_size;
             column* c = get_column_info(args->table, args->columns[i][j].column_name);
+            attr* a;
+
             if (c == NULL) {
                 ereport(INFO, errmsg("init_cache_data: can't get column %s in table %s ", args->columns[i][j].column_name, args->table));
                 abort();
             }
             column_name_size = strlen(c->column_name) + 1;
-            attr* a = &(data->v->values[i][j]);
+            a = &(data->v->values[i][j]);
             a->type = c->type;
             a->column_name = wcalloc(column_name_size * sizeof(char) );
             memcpy(a->column_name, args->columns[i][j].column_name, column_name_size);

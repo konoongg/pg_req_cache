@@ -38,7 +38,6 @@ thread_local wthread wthrd;
 
 //All obtained responses are written to the connection
 proc_status process_write(connection* conn) {
-    ereport(INFO, errmsg("process_write: START  conn %p", conn));
     event_data* w_data = conn->w_data;
     answer_list* answers  = (answer_list*)w_data->data;
     answer* cur_answer = answers->first;
@@ -65,20 +64,16 @@ proc_status process_write(connection* conn) {
     }
     answers->first = answers->last = NULL;
 
-    ereport(INFO, errmsg("process_write: start reader"));
     start_event(conn->wthrd->l, conn->r_data->handle);
-    ereport(INFO, errmsg("process_write: stop writer"));
     stop_event(conn->wthrd->l, conn->w_data->handle);
 
     move_from_active_to_wait(conn);
     conn->proc = process_read;
-    ereport(INFO, errmsg("process_write: FINISH"));
     return WAIT_PROC;
 }
 
 // This event is processed solely to notify the loop that it needs to check the queue of active connections
 proc_status notify(connection* conn) {
-    ereport(INFO, errmsg("notify: START"));
 
     not_status not_s = event_get_notify(conn->wthrd->not);
     if (not_s == NOT_TA) {
@@ -94,7 +89,6 @@ proc_status notify(connection* conn) {
 * All received requests are handled.
 */
 proc_status process_data(connection* conn) {
-    ereport(INFO, errmsg("process_data: START  conn %p", conn));
     io_read* r_data = (io_read*)conn->r_data->data;
     answer_list* w_data = (answer_list*)conn->w_data->data;
     client_req* cur_req;
@@ -106,7 +100,6 @@ proc_status process_data(connection* conn) {
         if (cur_req == NULL) {
             conn->status = WRITE;
             conn->proc = process_write;
-            //ereport(INFO, errmsg("process_data: start writer"));
             start_event(conn->wthrd->l, conn->w_data->handle);
 
             move_from_active_to_wait(conn);
@@ -145,7 +138,6 @@ proc_status process_data(connection* conn) {
 * parse all available data (e.g., if two requests are received, we process both).
 * If an error or connection closure occurs, we release the associated resources. */
 proc_status process_read(connection* conn) {
-    ereport(INFO, errmsg("process_read: START  conn %p", conn));
     exit_status status;
     int buffer_free_size;
     int res;
@@ -164,20 +156,17 @@ proc_status process_read(connection* conn) {
         } else if (status == ALL) {
             while (status == ALL) {
                 status = pars_data(io_r_data);
-                //ereport(INFO, errmsg("process_read: io_r_data->reqs->last->argv[0] %s", io_r_data->reqs->last->argv[0]));
             }
             stop_event(wthrd.l, conn->r_data->handle);
             conn->status = PROCESS;
             conn->proc = process_data;
 
-            //ereport(INFO, errmsg("process_read: FINISH ALIVE"));
             return ALIVE_PROC;
         } else if (status == NOT_ALL) {
             move_from_active_to_wait(conn);
             return WAIT_PROC;
         }
     } else if (res == 0) {
-        //ereport(INFO, errmsg("process_read: close conenction"));
         conn->status = CLOSE;
         delete_active(conn);
         finish_connection(conn);
@@ -193,7 +182,6 @@ proc_status process_read(connection* conn) {
 
 // Handling the accept operation: creating a new connection and adding it to the pending queue.
 proc_status process_accept(connection* conn) {
-    ereport(INFO, errmsg("process_accept: START  conn %p", conn));
     answer_list* a_list;
     char* read_buffer;
     connection* new_conn;
@@ -241,7 +229,6 @@ proc_status process_accept(connection* conn) {
 
     new_conn->status = READ;
     new_conn->proc = process_read;
-    //ereport(INFO, errmsg("process_read: new_conn %p", new_conn));
 
     start_event(wthrd.l, new_conn->r_data->handle);
 
@@ -275,22 +262,16 @@ void* start_worker(void* argv) {
     listen_conn->status = ACCEPT;
 
 
-    //ereport(INFO, errmsg("start_worker: listen_conn %p", listen_conn));
-
     start_event(wthrd.l, listen_conn->r_data->handle);
     efd = create_ev_notify(& wthrd);
 
     efd_conn = create_connection(efd, &wthrd);
     init_event(efd_conn, efd_conn->r_data->handle, efd_conn->fd, EVENT_READ);
     add_wait(efd_conn);
-    ereport(INFO, errmsg("start_worker: efd_conn %p", efd_conn));
-    ereport(INFO, errmsg("start_worker: listen_conn %p", listen_conn));
     efd_conn->proc = notify;
     efd_conn->status = NOTIFY;
 
     start_event(wthrd.l, efd_conn->r_data->handle);
-
-    //ereport(INFO, errmsg("start_worker:  efd_conn %p",  efd_conn));
 
     while (true) {
         CHECK_FOR_INTERRUPTS();
@@ -312,8 +293,6 @@ void init_workers(void) {
             abort();
         }
     }
-
-    //ereport(INFO, errmsg("start all workers (%d)", conf.count_worker));
 
     for (int i = 0; i < conf.count_worker; ++i) {
         int err = pthread_join(tids[i], NULL);

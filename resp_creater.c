@@ -138,6 +138,7 @@ void create_array_resp(answer* answ, value* res) {
                     create_bulk_string_resp(&(sub_sub_answer[j]), a->data->str.str, a->data->str.size);
                     break;
             }
+            sub_answers[i].answer_size += sub_sub_answer[j].answer_size;
         }
 
         sub_answers[i].answer = wcalloc(sub_answers[i].answer_size * sizeof(char));

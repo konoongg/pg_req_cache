@@ -135,10 +135,9 @@ char* create_pg_set(char* table, char* column, cache_data* data) {
     }
 
 
-    columns_name = wcalloc(columns_name_size * sizeof(char));
-    columns_value = wcalloc(columns_value_size * sizeof(char));
-    set_values = wcalloc(set_values_size * sizeof(char));
-
+    columns_name = wcalloc((columns_name_size + 1) * sizeof(char));
+    columns_value = wcalloc( (columns_value_size + 1) * sizeof(char));
+    set_values = wcalloc((set_values_size + 1) * sizeof(char));
     for (int i = 0; i < count_attr; ++i) {
 
         int c_name_size = strlen(data->v->values[0][i].column_name);
@@ -165,7 +164,6 @@ char* create_pg_set(char* table, char* column, cache_data* data) {
 
                 memcpy(set_values + set_values_index, "\'", 1);
                 set_values_index += 1;
-
                 memcpy(set_values + set_values_index, str->str, str->size);
                 set_values_index +=  str->size;
 
@@ -198,6 +196,9 @@ char* create_pg_set(char* table, char* column, cache_data* data) {
         }
     }
 
+    columns_name[columns_name_size] = '\0';
+    columns_value[columns_value_size] = '\0';
+    set_values[set_values_size] = '\0';
     size_req += strlen(table) + 2 * columns_name_size + columns_value_size + set_values_size;
     bd_req = wcalloc(size_req * sizeof(char));
     snprintf(bd_req, size_req, "INSERT INTO %s (%s) VALUES (%s) ON CONFLICT (%s) DO UPDATE SET %s;",

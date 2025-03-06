@@ -68,9 +68,14 @@ db_oper_res read_from_db(PGconn* conn, char* t, req_table** req) {
             return ERR_OPER_RES;
         }
 
-        res = PQgetResult(conn);
-        if (res != NULL) {
-            return ERR_OPER_RES;
+        while (res != NULL) {
+            if (PQresultStatus(res) == PGRES_FATAL_ERROR) {
+                const char* errorMessage = PQresultErrorMessage(res);
+                ereport(INFO, errmsg("read_from_db: bd response error  -  %s", errorMessage));
+                abort();
+            }
+            res = PQgetResult(conn);
+            PQclear(res);
         }
 
         return READ_OPER_RES;

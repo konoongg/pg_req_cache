@@ -63,7 +63,7 @@ void proxy_start_work(Datum main_arg) {
 
     ereport(INFO, errmsg("start init db worker"));
     init_db_worker();
-    ereport(INFO, errmsg("finish init db worker"));
+    ereport(INFO, errmsg("finish init db worker %d", config.worker_conf.count_worker));
 
     init_workers();
 }

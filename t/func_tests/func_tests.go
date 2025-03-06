@@ -231,12 +231,12 @@ func getFromDb(test *Test) bool {
 	}
 	defer conn.Close()
 
-	insertQuery := `INSERT INTO test (test1, test2, test3) VALUES ('get_from_db', '2', '3')`
-	_, err = conn.connToPG.Exec(insertQuery)
-	if err != nil {
-		test.err = "can't connect to db (" + err.Error() + ")"
-		return false
-	}
+	// insertQuery := `INSERT INTO test (test1, test2, test3) VALUES ('get_from_db', '2', '3')`
+	// _, err = conn.connToPG.Exec(insertQuery)
+	// if err != nil {
+	// 	test.err = "can't connect to db (" + err.Error() + ")"
+
+	// }
 
 	test.waitAnswer = []byte("*1\r\n*3\r\n$11\r\nget_from_db\r\n$1\r\n2\r\n$1\r\n3\r\n")
 	request := []byte("*2\r\n$3\r\nget\r\n$22\r\ntest.test1.get_from_db\r\n")
@@ -287,35 +287,35 @@ func escapeSpecialChars(data []byte) string {
 func main() {
 
 	tests := []Test{
-		// {
-		// 	testName: "simple set test",
-		// 	callback: simpleSetTest,
-		// },
+		{
+			testName: "simple set test",
+			callback: simpleSetTest,
+		},
 
-		// {
-		// 	testName: "simple set test x2",
-		// 	callback: simpleSetTest_x2,
-		// },
+		{
+			testName: "simple set test x2",
+			callback: simpleSetTest_x2,
+		},
 		{
 			testName: "simple get test",
 			callback: simpleGetTest,
 		},
-		// {
-		// 	testName: "simple del test",
-		// 	callback: simpleDelTest,
-		// },
-		// {
-		// 	testName: "double del test",
-		// 	callback: doubleDelTest,
-		// },
-		// {
-		// 	testName: "simple del test x2",
-		// 	callback: simpleDelTest_x2,
-		// },
-		// {
-		// 	testName: "get from Db",
-		// 	callback: getFromDb,
-		// },
+		{
+			testName: "simple del test",
+			callback: simpleDelTest,
+		},
+		{
+			testName: "double del test",
+			callback: doubleDelTest,
+		},
+		{
+			testName: "simple del test x2",
+			callback: simpleDelTest_x2,
+		},
+		{
+			testName: "get from Db",
+			callback: getFromDb,
+		},
 	}
 
 	for test_num, test := range tests {
