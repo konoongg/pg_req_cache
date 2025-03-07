@@ -19,7 +19,8 @@ void defalt_setting_init(void) {
 
     config.c_conf.count_basket = 100000; // cache basket
     config.c_conf.ttl_s = 5; // cache ttl
-
+    config.c_conf.max_storage_size = 1024 * 1024 * 1024;
+    config.c_conf.max_storage_size = 10;
     config.c_conf.seed = 101; // hash seed
 
     // fp = fopen("/dev/urandom","r");

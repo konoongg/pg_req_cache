@@ -5,6 +5,8 @@
 
 #include "event.h"
 
+#define NOT_USE_FD -1
+
 typedef enum not_status not_status;
 typedef enum conn_status conn_status;
 typedef enum proc_status proc_status;

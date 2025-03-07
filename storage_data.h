@@ -56,6 +56,7 @@ struct cache_data {
     char* key;
     int key_size;
     time_t last_time;
+    size_t cache_data_size;
 };
 
 struct req_column {

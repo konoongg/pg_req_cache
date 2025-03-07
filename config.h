@@ -26,6 +26,8 @@ struct cache_conf {
     int count_basket;
     int ttl_s;
     uint8_t seed;
+    size_t max_storage_size; // max cache mem size (Byte)
+    int check_time_s; // the time interval during which the cache is checked for records with expired ttl (seconds)
 };
 
 struct db_conn_conf {

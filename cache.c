@@ -2,6 +2,7 @@
 #define _GNU_SOURCE
 #endif
 
+#include <assert.h>
 #include <errno.h>
 #include <pthread.h>
 #include <stdbool.h>
@@ -22,32 +23,108 @@
 bool check_ttl(cache_data* data);
 cache_basket* get_basket(char* key, int key_size);
 cache_data* find_data_in_basket(cache_basket* basket, char* key, int key_size);
-void free_storage(kv_storage storage);
+void add_cache_size(size_t size);
+void basket_lock(cache_basket* basket);
+void basket_unlock(cache_basket* basket);
 void free_data_from_cache(cache_data* data);
+void free_storage(kv_storage storage);
+void sub_cache_size(size_t size);
 
 cache* c;
 extern config_redis config;
 
+void add_cache_size(size_t size) {
+    int err = pthread_spin_lock(c->size_lock);
+    if (err != 0) {
+        ereport(INFO, errmsg("get_cur_cache_size: pthread_spin_lock %s", strerror(err)));
+        abort();
+    }
+    c->cur_cache_size += size;
+    err = pthread_spin_unlock(c->size_lock);
+    if (err != 0) {
+        ereport(INFO, errmsg("get_cur_cache_size: pthread_spin_unlock %s", strerror(err)));
+        abort();
+    }
+}
+
+void sub_cache_size(size_t size) {
+    int err = pthread_spin_lock(c->size_lock);
+    if (err != 0) {
+        ereport(INFO, errmsg("get_cur_cache_size: pthread_spin_lock %s", strerror(err)));
+        abort();
+    }
+    c->cur_cache_size -= size;
+    assert(c->cur_cache_size >= 0);
+    err = pthread_spin_unlock(c->size_lock);
+    if (err != 0) {
+        ereport(INFO, errmsg("get_cur_cache_size: pthread_spin_unlock %s", strerror(err)));
+        abort();
+    }
+}
+
+void basket_lock(cache_basket* basket) {
+    int err = pthread_spin_lock(basket->lock);
+    if (err != 0) {
+        ereport(INFO, errmsg("cache_timer_delete: pthread_spin_lock %s", strerror(err)));
+        abort();
+    }
+}
+
+void basket_unlock(cache_basket* basket) {
+    int err = pthread_spin_unlock(basket->lock);
+    if (err != 0) {
+        ereport(INFO, errmsg("cache_timer_delete: pthread_spin_unlock %s", strerror(err)));
+        abort();
+    }
+}
+
+
 // It releases the data from the cache.
 void free_data_from_cache(cache_data* data) {
+    sub_cache_size(data->cache_data_size);
     free_values(data->v);
     free(data->key);
     free(data);
 }
 
+size_t get_cur_cache_size(void) {
+    size_t size;
+    int err;
+
+    err = pthread_spin_lock(c->size_lock);
+    if (err != 0) {
+        ereport(INFO, errmsg("get_cur_cache_size: pthread_spin_lock %s", strerror(err)));
+        abort();
+    }
+    size = c->cur_cache_size;
+    err = pthread_spin_unlock(c->size_lock);
+    if (err != 0) {
+        ereport(INFO, errmsg("get_cur_cache_size: pthread_spin_unlock %s", strerror(err)));
+        abort();
+    }
+    return size;
+}
+
 void init_cache(void) {
     kv_storage* storage;
+    int err;
 
     c = wcalloc(sizeof(cache));
     c->storage = wcalloc(sizeof(kv_storage));
-    storage = c->storage;
-
     c->count_basket = config.c_conf.count_basket;
+    c->cur_cache_size = 0;
+    c->size_lock = wcalloc(sizeof(pthread_spinlock_t));
+    err = pthread_spin_init(c->size_lock, PTHREAD_PROCESS_PRIVATE);
+    if (err != 0) {
+        ereport(INFO, errmsg("init_cache: pthread_spin_lock %s", strerror(err)));
+        abort();
+    }
+
+    storage = c->storage;
     storage->hash_func = murmur_hash_2;
     storage->kv = wcalloc(c->count_basket * sizeof(cache_basket));
 
     for (int i = 0; i < c->count_basket; ++i) {
-        int err;
         (storage->kv[i]).lock = wcalloc(sizeof(pthread_spinlock_t));
         err = pthread_spin_init(storage->kv[i].lock, PTHREAD_PROCESS_PRIVATE);
         if (err != 0) {
@@ -112,6 +189,31 @@ bool check_ttl(cache_data* data) {
     return true;
 }
 
+void cache_timer_delete(time_t time) {
+    int err;
+    time_t cur_time = time(NULL);
+    for (int i = 0; i < c->count_basket; ++i) {
+        cache_basket* basket = &(c->storage->kv[i]);
+
+        basket_lock(basket);
+
+        cache_data* cur_data = basket->first;
+        cache_data* prev_data = NULL;
+        while (cur_data != NULL) {
+            cache_data* next_data = cur_data->next;
+            if (cur_time - cur_data->last_time >= time)  {
+                prev_data->next = next_data;
+                free_data_from_cache(cur_data);
+            } else {
+                prev_data = cur_data;
+            }
+            cur_data = next_data;
+        }
+
+        basket_unlock(basket);
+    }
+}
+
 /*
 * A function to retrieve data from the cache.
 * The function copies the data and returns a pointer to the copied data if the data is found.
@@ -120,28 +222,19 @@ bool check_ttl(cache_data* data) {
 value* get_cache(char* key, int key_size) {
     cache_basket* basket;
     cache_data* data;
-    int err;
     value* result;
 
     result = NULL;
 
     basket = get_basket(key, key_size);
-    err = pthread_spin_lock(basket->lock);
-    if (err != 0) {
-        ereport(INFO, errmsg("get_cache: pthread_spin_lock %s", strerror(err)));
-        abort();
-    }
+    basket_lock(basket);
 
     data = find_data_in_basket(basket, key, key_size);
     if (data != NULL && check_ttl(data)) {
         result = create_copy_data(data->v);
     }
 
-    err = pthread_spin_unlock(basket->lock);
-    if (err != 0) {
-        ereport(INFO, errmsg("get_cache: pthread_spin_unlock %s", strerror(err)));
-        abort();
-    }
+    basket_unlock(basket);
 
     return result;
 }
@@ -154,15 +247,10 @@ value* get_cache(char* key, int key_size) {
 void set_cache(cache_data* new_data) {
     cache_basket* basket;
     cache_data* data;
-    int err;
 
     basket = get_basket(new_data->key, new_data->key_size);
 
-    err = pthread_spin_lock(basket->lock);
-    if (err != 0) {
-        ereport(INFO, errmsg("get_cache: pthread_spin_lock %s", strerror(err)));
-        abort();
-    }
+    basket_lock(basket);
 
     data = find_data_in_basket(basket, new_data->key, new_data->key_size);
     if (data == NULL) {
@@ -177,9 +265,11 @@ void set_cache(cache_data* new_data) {
         data->key = new_data->key;
         data->v = new_data->v;
     } else {
+        sub_cache_size(data->cache_data_size);
         free_values(data->v);
         data->v = new_data->v;
     }
+    add_cache_size(data->cache_data_size);
 
     data->last_time = time(NULL);
     if (data->last_time == -1) {
@@ -188,26 +278,17 @@ void set_cache(cache_data* new_data) {
         abort();
     }
 
-    err = pthread_spin_unlock(basket->lock);
-    if (err != 0) {
-        ereport(INFO, errmsg("set_cache: pthread_spin_unlock %s", strerror(err)));
-        abort();
-    }
+    basket_unlock(basket);
 }
 
 int delete_cache(char* key, int key_size) {
     cache_basket* basket;
     cache_data* data;
     cache_data* prev_data;
-    int err;
 
     basket = get_basket(key, key_size);
 
-    err = pthread_spin_lock(basket->lock);
-    if (err != 0) {
-        ereport(INFO, errmsg("delete_cache: pthread_spin_lock %s", strerror(err)));
-        abort();
-    }
+    basket_lock(basket);
 
     data = basket->first;
     prev_data = NULL;
@@ -220,11 +301,7 @@ int delete_cache(char* key, int key_size) {
     }
 
     if (data == NULL) {
-        err = pthread_spin_unlock(basket->lock);
-        if (err != 0) {
-            ereport(INFO, errmsg("delete_cache: pthread_spin_unlock %s", strerror(err)));
-            abort();
-        }
+        basket_unlock(basket);
         return 0;
     } else if (data == basket->first) {
         basket->first = data->next;
@@ -238,16 +315,13 @@ int delete_cache(char* key, int key_size) {
 
     free_data_from_cache(data);
 
-    err = pthread_spin_unlock(basket->lock);
-    if (err != 0) {
-        ereport(INFO, errmsg("delete_cache: pthread_spin_unlock %s", strerror(err)));
-        abort();
-    }
-
+    basket_unlock(basket);
     return 1;
 }
 
 void free_cache(void) {
+    int err;
+
     for (int i = 0; i < c->count_basket; ++i) {
         cache_basket* basket = &(c->storage->kv[i]);
         cache_data* cur_data = basket->first;
@@ -256,7 +330,20 @@ void free_cache(void) {
             free_data_from_cache(cur_data);
             cur_data = new_data;
         }
+        err = pthread_spin_destroy(basket->lock);
+        if (err != 0) {
+            ereport(INFO, errmsg("free_cache: pthread_spin_destroy %s", strerror(err)));
+            abort();
+        }
+        free(basket->lock);
     }
+    err = pthread_spin_destroy(c->size_lock);
+    if (err != 0) {
+        ereport(INFO, errmsg("free_cache: pthread_spin_destroy %s", strerror(err)));
+        abort();
+    }
+
+    free(c->size_lock);
     free(c->storage->kv);
     free(c->storage);
     free(c);

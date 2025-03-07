@@ -228,17 +228,22 @@ proc_status notify_db(connection* conn) {
 //Based on the pre-formed data information, we create data for the cache and add metadata.
 cache_data* init_cache_data(char* key, int key_size, req_table* args) {
     cache_data* data = wcalloc(sizeof(cache_data));
+    data->cache_data_size = sizeof(cache_data);
+
     data->key = wcalloc(key_size * sizeof(char));
+    data->cache_data_size += key_size * sizeof(char);
     data->key_size = key_size;
     memcpy(data->key, key, key_size);
 
     data->v = wcalloc(sizeof(value));
+    data->cache_data_size += sizeof(value);
     data->v->count_fields = args->count_fields;
     data->v->count_tuples = args->count_tuples;
-
     data->v->values = wcalloc(args->count_tuples * sizeof(attr*));
+    data->cache_data_size += args->count_tuples * sizeof(attr*);
     for (int i = 0; i < args->count_tuples; ++i) {
         data->v->values[i] = wcalloc(args->count_fields * sizeof(attr));
+        data->cache_data_size += args->count_fields * sizeof(attr);
         for (int j = 0; j < args->count_fields; ++j ) {
             int column_name_size;
             column* c = get_column_info(args->table, args->columns[i][j].column_name);
@@ -251,20 +256,22 @@ cache_data* init_cache_data(char* key, int key_size, req_table* args) {
             column_name_size = strlen(c->column_name) + 1;
             a = &(data->v->values[i][j]);
             a->type = c->type;
-            a->column_name = wcalloc(column_name_size * sizeof(char) );
+            a->column_name = wcalloc(column_name_size * sizeof(char));
+            data->cache_data_size += column_name_size * sizeof(char);
             memcpy(a->column_name, args->columns[i][j].column_name, column_name_size);
             a->is_nullable = c->is_nullable;
 
 
             a->data = wcalloc(sizeof(db_data));
-            switch (a->type)
-            {
+            data->cache_data_size += sizeof(db_data);
+            switch (a->type) {
                 case INT:
                     a->data->num = (int)strtol(args->columns[i][j].data, NULL, 10);
                     break;
                 case STRING:
                     a->data->str.size = args->columns[i][j].data_size;
                     a->data->str.str = wcalloc(a->data->str.size * sizeof(char));
+                    data->cache_data_size += a->data->str.size * sizeof(char);
                     memcpy(a->data->str.str, args->columns[i][j].data, a->data->str.size );
                     break;
             }
@@ -323,7 +330,6 @@ void init_db_worker(void) {
 
     init_event(efd_conn, efd_conn->r_data->handle, efd_conn->fd, EVENT_READ);
     add_wait(efd_conn);
-
 
     for (int i = 0; i < dbw.count_backends; ++i) {
         connection* db_conn = create_connection(dbw.backends[i].fd, dbw.wthrd);

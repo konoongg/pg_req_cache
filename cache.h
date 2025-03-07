@@ -16,10 +16,11 @@ typedef struct data data;
 typedef struct kv_storage kv_storage;
 
 int delete_cache(char* key, int key_size);
-void set_cache(cache_data* new_data);
+value* get_cache(char* key, int key_size);
+void cache_timer_delete(time_t time);
 void free_cache(void);
 void init_cache(void);
-value* get_cache(char* key, int key_size);
+void set_cache(cache_data* new_data);
 
 /*
 * A structure describing a cache bucket.
@@ -47,6 +48,8 @@ struct kv_storage {
 
 struct cache {
     kv_storage* storage;
+    size_t cur_cache_size;
+    pthread_spinlock_t* size_lock;
     int count_basket;
 };
 

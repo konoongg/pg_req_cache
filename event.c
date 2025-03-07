@@ -28,6 +28,17 @@ void init_event(void* data, handle* h, int fd, event_mode mode) {
     ((struct ev_io*)(h->handle))->data = data;
 }
 
+void init_timer(void* data, handle* h, int after_time, int repeat_time) {
+    h->handle = (struct ev_timer*)wcalloc(sizeof(struct ev_timer));
+    ev_timer_init((struct ev_timer*)h->handle, callback, after_time, repeat_time);
+    (struct ev_timer*)(h->handle)->data = data;
+}
+
+void start_timer(event_loop* l, handle* h) {
+    ev_timer_start(l->loop, (struct ev_timer*)h->handle);
+}
+
+
 void start_event(event_loop* l, handle* h) {
     ev_io_start(l->loop, (struct ev_io*)h->handle);
 }
