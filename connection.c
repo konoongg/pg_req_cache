@@ -268,12 +268,18 @@ void finish_connection(connection* conn) {
 }
 
 void event_notify(e_notify* not) {
-    char sig_ev = 0;
-    int res = write(not->pipe_fd[1], &sig_ev, 1);
-    if (res == -1) {
-        char* err = strerror(errno);
-        ereport(INFO, errmsg("event_notify fd %d: write %s", not->pipe_fd[1], err));
-        abort();
+    while (true) {
+        char sig_ev = 0;
+        int res = write(not->pipe_fd[1], &sig_ev, 1);
+        if (res == -1) {
+            char* err = strerror(errno);
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                continue;
+            }
+            ereport(INFO, errmsg("event_notify fd %d: write %s", not->pipe_fd[1], err));
+            abort();
+        }
+        break;
     }
 }
 

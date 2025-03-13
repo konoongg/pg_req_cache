@@ -50,6 +50,9 @@ enum conn_status {
     NOTIFY_DB,
     READ_DB,
     WRITE_DB,
+
+    // Similar functions for the loop running within the cache gc worker.
+    CHECK_CACHE,
 };
 
 enum not_status {

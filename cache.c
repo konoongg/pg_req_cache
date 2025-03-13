@@ -15,6 +15,7 @@
 #include "utils/elog.h"
 
 #include "alloc.h"
+#include "cache_gc.h"
 #include "cache.h"
 #include "config.h"
 #include "hash.h"
@@ -23,7 +24,7 @@
 bool check_ttl(cache_data* data);
 cache_basket* get_basket(char* key, int key_size);
 cache_data* find_data_in_basket(cache_basket* basket, char* key, int key_size);
-void add_cache_size(size_t size);
+cache_need_gc add_cache_size(size_t size);
 void basket_lock(cache_basket* basket);
 void basket_unlock(cache_basket* basket);
 void free_data_from_cache(cache_data* data);
@@ -33,18 +34,23 @@ void sub_cache_size(size_t size);
 cache* c;
 extern config_redis config;
 
-void add_cache_size(size_t size) {
+cache_need_gc add_cache_size(size_t size) {
+    cache_need_gc status = HAVE_SIZE;
     int err = pthread_spin_lock(c->size_lock);
     if (err != 0) {
         ereport(INFO, errmsg("get_cur_cache_size: pthread_spin_lock %s", strerror(err)));
         abort();
     }
     c->cur_cache_size += size;
+    if (c->cur_cache_size >= config.c_conf.max_storage_size) {
+        status = NEED_GC;
+    }
     err = pthread_spin_unlock(c->size_lock);
     if (err != 0) {
         ereport(INFO, errmsg("get_cur_cache_size: pthread_spin_unlock %s", strerror(err)));
         abort();
     }
+    return status;
 }
 
 void sub_cache_size(size_t size) {
@@ -65,7 +71,7 @@ void sub_cache_size(size_t size) {
 void basket_lock(cache_basket* basket) {
     int err = pthread_spin_lock(basket->lock);
     if (err != 0) {
-        ereport(INFO, errmsg("cache_timer_delete: pthread_spin_lock %s", strerror(err)));
+        ereport(INFO, errmsg("basket_lock: pthread_spin_lock %s", strerror(err)));
         abort();
     }
 }
@@ -73,7 +79,7 @@ void basket_lock(cache_basket* basket) {
 void basket_unlock(cache_basket* basket) {
     int err = pthread_spin_unlock(basket->lock);
     if (err != 0) {
-        ereport(INFO, errmsg("cache_timer_delete: pthread_spin_unlock %s", strerror(err)));
+        ereport(INFO, errmsg("basket_unlock: pthread_spin_unlock %s", strerror(err)));
         abort();
     }
 }
@@ -189,19 +195,20 @@ bool check_ttl(cache_data* data) {
     return true;
 }
 
-void cache_timer_delete(time_t time) {
-    int err;
+void cache_timer_delete(time_t check_time) {
     time_t cur_time = time(NULL);
     for (int i = 0; i < c->count_basket; ++i) {
         cache_basket* basket = &(c->storage->kv[i]);
+        cache_data* cur_data;
+        cache_data* prev_data;
 
         basket_lock(basket);
 
-        cache_data* cur_data = basket->first;
-        cache_data* prev_data = NULL;
+        cur_data = basket->first;
+        prev_data = NULL;
         while (cur_data != NULL) {
             cache_data* next_data = cur_data->next;
-            if (cur_time - cur_data->last_time >= time)  {
+            if (cur_time - cur_data->last_time >= check_time)  {
                 prev_data->next = next_data;
                 free_data_from_cache(cur_data);
             } else {
@@ -269,7 +276,10 @@ void set_cache(cache_data* new_data) {
         free_values(data->v);
         data->v = new_data->v;
     }
-    add_cache_size(data->cache_data_size);
+
+    if (add_cache_size(data->cache_data_size) == NEED_GC) {
+        wake_up_cache_gc();
+    }
 
     data->last_time = time(NULL);
     if (data->last_time == -1) {
@@ -277,7 +287,6 @@ void set_cache(cache_data* new_data) {
         ereport(INFO, errmsg("set_cache: time error  %s", err));
         abort();
     }
-
     basket_unlock(basket);
 }
 
@@ -335,7 +344,7 @@ void free_cache(void) {
             ereport(INFO, errmsg("free_cache: pthread_spin_destroy %s", strerror(err)));
             abort();
         }
-        free(basket->lock);
+        free((void*) basket->lock);
     }
     err = pthread_spin_destroy(c->size_lock);
     if (err != 0) {
@@ -343,7 +352,7 @@ void free_cache(void) {
         abort();
     }
 
-    free(c->size_lock);
+    free((void*)c->size_lock);
     free(c->storage->kv);
     free(c->storage);
     free(c);

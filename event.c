@@ -13,6 +13,8 @@ extern config_redis config;
 
 void callback(EV_P_ struct ev_io* io_handle, int revents);
 
+void timer_callback(EV_P_ struct ev_timer* time_handle, int revents);
+
 
 // Initialization of the event, in the current implementation, libev is used.
 void init_event(void* data, handle* h, int fd, event_mode mode) {
@@ -30,8 +32,8 @@ void init_event(void* data, handle* h, int fd, event_mode mode) {
 
 void init_timer(void* data, handle* h, int after_time, int repeat_time) {
     h->handle = (struct ev_timer*)wcalloc(sizeof(struct ev_timer));
-    ev_timer_init((struct ev_timer*)h->handle, callback, after_time, repeat_time);
-    (struct ev_timer*)(h->handle)->data = data;
+    ev_timer_init((struct ev_timer*)h->handle, timer_callback, after_time, repeat_time);
+    ((struct ev_timer*)(h->handle))->data = data;
 }
 
 void start_timer(event_loop* l, handle* h) {
@@ -77,6 +79,16 @@ void loop_destroy(event_loop* l) {
 */
 void callback(EV_P_ struct ev_io* io_handle, int revents) {
     connection* conn = (connection*)io_handle->data;
+    if (revents & EV_ERROR) {
+        free_connection(conn);
+        abort();
+    }
+    assert(conn->is_wait);
+    move_from_wait_to_active(conn);
+}
+
+void timer_callback(EV_P_ struct ev_timer* time_handle, int revents) {
+    connection* conn = (connection*)time_handle->data;
     if (revents & EV_ERROR) {
         free_connection(conn);
         abort();

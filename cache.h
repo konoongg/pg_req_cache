@@ -9,6 +9,7 @@
 #include "config.h"
 #include "storage_data.h"
 
+typedef enum cache_need_gc cache_need_gc;
 typedef struct cache cache;
 typedef struct cache_basket cache_basket;
 typedef struct cache_get_result cache_get_result;
@@ -16,8 +17,9 @@ typedef struct data data;
 typedef struct kv_storage kv_storage;
 
 int delete_cache(char* key, int key_size);
+size_t get_cur_cache_size(void);
 value* get_cache(char* key, int key_size);
-void cache_timer_delete(time_t time);
+void cache_timer_delete(time_t check_time);
 void free_cache(void);
 void init_cache(void);
 void set_cache(cache_data* new_data);
@@ -51,6 +53,11 @@ struct cache {
     size_t cur_cache_size;
     pthread_spinlock_t* size_lock;
     int count_basket;
+};
+
+enum cache_need_gc {
+    HAVE_SIZE,
+    NEED_GC,
 };
 
 #endif

@@ -61,9 +61,8 @@ void register_command(char* tabl, char* req, connection* conn, com_reason reason
         dbw.commands->last->next = cmd;
         dbw.commands->last = dbw.commands->last->next;
     }
+    dbw.commands->last->next = NULL;
     dbw.commands->count_commands++;
-
-
     event_notify(dbw.wthrd->not);
 
     err = pthread_spin_unlock(dbw.lock);
@@ -291,7 +290,6 @@ void* start_db_worker(void*) {
         loop_step(dbw.wthrd);
     }
 }
-
 
 /*
 * Initializing the database, creating a loop to track events,

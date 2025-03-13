@@ -47,7 +47,7 @@ void defalt_setting_init(void) {
     config.worker_conf.count_worker = 4;
     config.worker_conf.listen_port = 6379;
 
-    config.db_conf.count_backend = 1; // count libpq backend
+    config.db_conf.count_backend = 4; // count libpq backend
     config.db_conf.dbname = wcalloc(9 * sizeof(char));
     config.db_conf.user = wcalloc(9 * sizeof(char));
     memcpy(config.db_conf.dbname, "postgres", 9);

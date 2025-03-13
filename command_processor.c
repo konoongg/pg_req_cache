@@ -139,6 +139,7 @@ process_result do_set(client_req* cl_req, answer* answ, connection* conn) {
     memcpy(answ->answer, def_resp.ok.answer, answ->answer_size);
 
     move_from_active_to_wait(conn);
+
     register_command(new_req->table, req_to_db, conn, CACHE_SYNC, key, key_size);
 
     free_req(new_req);
