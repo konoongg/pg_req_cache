@@ -20,6 +20,8 @@ command_to_db* get_command(void);
 proc_status notify_db(connection* conn);
 proc_status process_read_db(connection* conn);
 proc_status process_write_db(connection* conn);
+void dbw_lock(void);
+void dbw_unlock(void);
 void free_db_command(command_to_db* cmd);
 void* start_db_worker(void*);
 
@@ -30,14 +32,30 @@ void free_db_command(command_to_db* cmd) {
     free(cmd);
 }
 
+void dbw_lock(void) {
+    int err = pthread_mutex_lock(dbw.lock);
+    if (err != 0) {
+        printf("dbw_lock: pthread_mutex_lock() failed: %s\n", strerror(err));
+        abort();
+    }
+}
+
+
+void dbw_unlock(void) {
+    int err = pthread_mutex_unlock(dbw.lock);
+    if (err != 0) {
+        printf("dbw_lock: pthread_mutex_unlock() failed: %s\n", strerror(err));
+        abort();
+    }
+}
+
 /*
 * Registering a new event for database processing.
 * The event is added to the processing queue,
 * and the database worker's loop is notified via eventfd that new events have arrived.
 */
-void register_command(char* tabl, char* req, connection* conn, com_reason reason, char* key, int key_size) {
+void register_command(char* tabl, char* req, connection* conn, com_reason reason, char* key, int key_size) { 
     command_to_db* cmd = wcalloc(sizeof(command_to_db));
-    int err;
 
     cmd->next = NULL;
     cmd->conn = conn;
@@ -49,11 +67,7 @@ void register_command(char* tabl, char* req, connection* conn, com_reason reason
     memcpy(cmd->key, key, key_size);
     cmd->key_size = key_size;
 
-    err = pthread_spin_lock(dbw.lock);
-    if (err != 0) {
-        ereport(INFO, errmsg("register_command: pthread_spin_lock %s", strerror(err)));
-        abort();
-    }
+    dbw_lock();
 
     if (dbw.commands->first == NULL) {
         dbw.commands->first = dbw.commands->last = cmd;
@@ -65,22 +79,14 @@ void register_command(char* tabl, char* req, connection* conn, com_reason reason
     dbw.commands->count_commands++;
     event_notify(dbw.wthrd->not);
 
-    err = pthread_spin_unlock(dbw.lock);
-    if (err != 0) {
-        ereport(INFO, errmsg("register_command: pthread_spin_unlock %s", strerror(err)));
-        abort();
-    }
+    dbw_unlock();
 }
 
 // Retrieving a command for processing from the queue
 command_to_db* get_command(void) {
-    int err = pthread_spin_lock(dbw.lock);
     command_to_db* cmd;
 
-    if (err != 0) {
-        ereport(INFO, errmsg("register_command: pthread_spin_lock %s", strerror(err)));
-        abort();
-    }
+    dbw_lock();
 
     cmd = dbw.commands->first;
     dbw.commands->first = dbw.commands->first->next;
@@ -90,11 +96,7 @@ command_to_db* get_command(void) {
         dbw.commands->first = dbw.commands->last = NULL;
     }
 
-    err = pthread_spin_unlock(dbw.lock);
-    if (err != 0) {
-        ereport(INFO, errmsg("register_command: pthread_spin_unlock %s", strerror(err)));
-        abort();
-    }
+    dbw_unlock();
 
     return cmd;
 }
@@ -135,7 +137,6 @@ proc_status process_write_db(connection* conn) {
 proc_status process_read_db(connection* conn) {
     backend* back = (backend*)conn->data;
     command_to_db* cmd = conn->w_data->data;
-    int err;
     req_table* req;
     db_oper_res res = read_from_db(back->conn_with_db, cmd->table, &req);
     if (res == READ_OPER_RES) {
@@ -158,20 +159,10 @@ proc_status process_read_db(connection* conn) {
 
         free_db_command(cmd);
 
-        err = pthread_spin_lock(dbw.lock);
-
-        if (err != 0) {
-            ereport(INFO, errmsg("process_read_db: pthread_spin_lock %s", strerror(err)));
-            abort();
-        }
-
+        dbw_lock();
         event_notify(conn->wthrd->not);
+        dbw_unlock();
 
-        err = pthread_spin_unlock(dbw.lock);
-        if (err != 0) {
-            ereport(INFO, errmsg("process_read_db: pthread_spin_unlock %s", strerror(err)));
-            abort();
-        }
         stop_event(dbw.wthrd->l, conn->r_data->handle);
         return WAIT_PROC;
     } else if (res == WAIT_OPER_RES) {
@@ -313,10 +304,10 @@ void init_db_worker(void) {
     init_wthread(dbw.wthrd);
     dbw.wthrd->l = init_loop();
 
-    dbw.lock = wcalloc(sizeof(pthread_spinlock_t));
-    err = pthread_spin_init(dbw.lock, PTHREAD_PROCESS_PRIVATE);
-    if (err != 0) {
-        ereport(INFO, errmsg("init_db_worker: pthread_spin_lock %s", strerror(err)));
+    dbw.lock = wcalloc(sizeof(pthread_mutex_t));
+    err = pthread_mutex_init(dbw.lock, NULL);
+    if (err != 0){
+        ereport(INFO, errmsg("init_db_worker: pthread_mutex_init %s", strerror(err)));
         abort();
     }
 

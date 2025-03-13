@@ -53,7 +53,7 @@ struct db_worker {
     backend* backends;
     int count_backends;
     list_command* commands;
-    pthread_spinlock_t* lock;
+    pthread_mutex_t* lock;
     wthread* wthrd;
 };
 

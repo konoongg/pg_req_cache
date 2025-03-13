@@ -69,17 +69,17 @@ void sub_cache_size(size_t size) {
 }
 
 void basket_lock(cache_basket* basket) {
-    int err = pthread_spin_lock(basket->lock);
+    int err = pthread_mutex_lock(basket->lock);
     if (err != 0) {
-        ereport(INFO, errmsg("basket_lock: pthread_spin_lock %s", strerror(err)));
+        printf("basket_lock: pthread_mutex_lock() failed: %s\n", strerror(err));
         abort();
     }
 }
 
 void basket_unlock(cache_basket* basket) {
-    int err = pthread_spin_unlock(basket->lock);
+    int err = pthread_mutex_unlock(basket->lock);
     if (err != 0) {
-        ereport(INFO, errmsg("basket_unlock: pthread_spin_unlock %s", strerror(err)));
+        printf("basket_lock: pthread_mutex_unlock() failed: %s\n", strerror(err));
         abort();
     }
 }
@@ -131,10 +131,10 @@ void init_cache(void) {
     storage->kv = wcalloc(c->count_basket * sizeof(cache_basket));
 
     for (int i = 0; i < c->count_basket; ++i) {
-        (storage->kv[i]).lock = wcalloc(sizeof(pthread_spinlock_t));
-        err = pthread_spin_init(storage->kv[i].lock, PTHREAD_PROCESS_PRIVATE);
+        (storage->kv[i]).lock = wcalloc(sizeof(pthread_mutex_t));
+        err = pthread_mutex_init((storage->kv[i]).lock, NULL);
         if (err != 0) {
-            ereport(INFO, errmsg("init_cache: pthread_spin_lock %s", strerror(err)));
+            ereport(INFO, errmsg("init_cache: pthread_mutex_init %s", strerror(err)));
             abort();
         }
     }
@@ -339,9 +339,9 @@ void free_cache(void) {
             free_data_from_cache(cur_data);
             cur_data = new_data;
         }
-        err = pthread_spin_destroy(basket->lock);
+        err = pthread_mutex_destroy(basket->lock);
         if (err != 0) {
-            ereport(INFO, errmsg("free_cache: pthread_spin_destroy %s", strerror(err)));
+            ereport(INFO, errmsg("free_cache: pthread_mutex_destroy %s", strerror(err)));
             abort();
         }
         free((void*) basket->lock);
