@@ -1,44 +1,96 @@
 import pytest
-from t.fixtures.table_fixtures import *
 from t.fixtures.db_fixtures import *
-from t.fixtures.pg_req_fixtures import *
-from t.fixtures.restart_fixures import *
+from t.utils.create_resp import *
+from t.utils.db_connect import *
 
 
-def test_simple_set_table_tt(create_table_text_text, restart_postgresql, open_table, req_socket):
-    cursor = open_table
-    socket = req_socket
+def test_simple_set_table_tt(create_and_drop_db, cleanup_schema):
+    db_name = create_and_drop_db
+    table_name = create_table_text_text(db_name)
+    restart_postgres()
+    cursor = open_table(db_name)
+    sock = create_socket()
 
-    command = b"*3\r\n$3\r\nset\r\n$24\r\ntest_table.column1.test1\r\n$27\r\ncolumn1:test1.column2:test2\r\n"
-    socket.sendall(command)
+    kv = {
+        "column1": "test1",
+        "column2": "test2"
+    }
 
-    response = socket.recv(1024)
-    assert response == b"+OK\r\n", f"Ожидался ответ '+OK\r\n', но получен: {response}"
+    key = create_key(table_name, "column1", "test1")
+    value = create_value(kv)
+    command = create_resp_req(" ".join(["set", key, value]))
+    answer = create_resp_simple_string("OK")
+    sock.sendall(command)
+
+    response = sock.recv(1024)
+    assert response == answer, f"Ожидался ответ {answer}, но получен: {response}"
 
     cursor.execute("SELECT * FROM test_table WHERE column1 = %s AND column2 = %s", ("test1", "test2"))
     result = cursor.fetchone()
 
     assert result is not None, "Строка с column1=test1 и column2=test2 не найдена в таблице"
 
-def test_simple_double_set_table_tt(create_table_text_text, restart_postgresql, open_table, req_socket):
-    cursor = open_table
-    socket = req_socket
+def test_simple_double_set_table_tt(create_and_drop_db, cleanup_schema):
+    db_name = create_and_drop_db
+    table_name = create_table_text_text(db_name)
+    restart_postgres()
+    cursor = open_table(db_name)
+    sock = create_socket()
 
-    command = b"*3\r\n$3\r\nset\r\n$24\r\ntest_table.column1.test1\r\n$27\r\ncolumn1:test1.column2:test2\r\n"
-    socket.sendall(command)
-    response = socket.recv(1024)
-    assert response == b"+OK\r\n", f"Ожидался ответ '+OK\r\n', но получен: {response}"
+    kv = {
+        "column1": "test1",
+        "column2": "test2"
+    }
+
+    key = create_key(table_name, "column1", "test1")
+    value = create_value(kv)
+    command = create_resp_req(" ".join(["set", key, value]))
+    answer = create_resp_simple_string("OK")
+    sock.sendall(command)
+
+    response = sock.recv(1024)
+    assert response == answer, f"Ожидался ответ {answer}, но получен: {response}"
+
     cursor.execute("SELECT * FROM test_table WHERE column1 = %s AND column2 = %s", ("test1", "test2"))
     result = cursor.fetchone()
     assert result is not None, "Строка с column1=test1 и column2=test2 не найдена в таблице"
 
-    command = b"*3\r\n$3\r\nset\r\n$24\r\ntest_table.column1.test1\r\n$27\r\ncolumn1:test2.column2:test3\r\n"
-    socket.sendall(command)
-    response = socket.recv(1024)
-    assert response == b"+OK\r\n", f"Ожидался ответ '+OK\r\n', но получен: {response}"
-    cursor.execute("SELECT * FROM test_table WHERE column1 = %s AND column2 = %s", ("test1", "test2"))
-    result = cursor.fetchone()
-    assert result is not None, "Строка с column1=test2 и column2=test3 не найдена в таблице"
+    kv = {
+        "column1": "test11",
+        "column2": "test22"
+    }
+    key = create_key(table_name, "column1", "test1")
+    value = create_value(kv)
+    command = create_resp_req(" ".join(["set", key, value]))
+    answer = create_resp_simple_string("OK")
+    sock.sendall(command)
 
-# def test_simple_set_table_ti(open_table_text_int, req_socket):
-    
+    response = sock.recv(1024)
+    assert response == answer, f"Ожидался ответ {answer}, но получен: {response}"
+    cursor.execute("SELECT * FROM test_table WHERE column1 = %s AND column2 = %s", ("test11", "test22"))
+    result = cursor.fetchone()
+    assert result is not None, "Строка с column1=test11 и column2=test22 не найдена в таблице"
+
+def test_simple_set_table_ti(create_and_drop_db, cleanup_schema):
+    db_name = create_and_drop_db
+    table_name = create_table_text_int(db_name)
+    restart_postgres()
+    cursor = open_table(db_name)
+    sock = create_socket()
+
+    kv = {
+        "column1": "test1",
+        "column2": 1
+    }
+
+    key = create_key(table_name, "column1", "test1")
+    value = create_value(kv)
+    command = create_resp_req(" ".join(["set", key, value]))
+    answer = create_resp_simple_string("OK")
+    sock.sendall(command)
+
+    response = sock.recv(1024)
+    assert response == answer, f"Ожидался ответ {answer}, но получен: {response}"
+
+    cursor.execute("SELECT * FROM test_table WHERE column1 = %s AND column2 = %s", ("test1", 1))
+    result = cursor.fetchone()

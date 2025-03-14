@@ -28,3 +28,27 @@ def create_and_drop_db():
 
     cursor.close()
     conn.close()
+
+@pytest.fixture(scope="function")
+def cleanup_schema():
+    yield
+
+    conn = psycopg2.connect(
+        dbname=DBname, host=Host
+    )
+    conn.autocommit = True
+    cursor = conn.cursor()
+
+
+    cursor.execute("""
+        DO $$ DECLARE
+            r RECORD;
+        BEGIN
+            FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+                EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
+            END LOOP;
+        END $$;
+    """)
+
+    cursor.close()
+    conn.close()
