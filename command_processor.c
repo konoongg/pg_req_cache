@@ -24,15 +24,18 @@ char* get_table_name(char* key);
 process_result do_del(client_req* cl_req, answer* answ, connection* conn);
 process_result do_get(client_req* cl_req, answer* answ, connection* conn);
 process_result do_ping(client_req* cl_req, answer* answ, connection* conn);
+process_result do_config(client_req* cl_req, answer* answ, connection* conn);
 process_result do_set(client_req* cl_req, answer* answ, connection* conn);
 void free_command(int hash);
+void to_lower(char* word, int size);
 
 // A structure mapping command names to the functions that execute them.
 redis_command commands[] = {
     {"del", do_del},
     {"get", do_get},
     {"set", do_set},
-    {"ping", do_ping}
+    {"ping", do_ping},
+    {"config", do_config}
 };
 
 // Extracting the table name from the key.
@@ -78,6 +81,22 @@ process_result do_ping(client_req* req, answer* answ, connection* conn) {
     answ->answer_size = def_resp.pong.answer_size;
     answ->answer = wcalloc(answ->answer_size  * sizeof(char));
     memcpy(answ->answer, def_resp.pong.answer, answ->answer_size);
+    return DONE;
+}
+
+process_result do_config(client_req* req, answer* answ, connection* conn) {
+    to_lower(req->argv[1], req->argv_size[1]);
+    if (strncmp("get", req->argv[1], 3) == 0 && req->argv_size[1] == 3) {
+        if (strncmp("save", req->argv[2], 4) == 0 && req->argv_size[2] == 4) {
+            answ->answer_size = def_resp.save.answer_size;
+            answ->answer = wcalloc(answ->answer_size  * sizeof(char));
+            memcpy(answ->answer, def_resp.save.answer, answ->answer_size);
+        } else if (strncmp("appendonly", req->argv[2], 10) == 0 && req->argv_size[2] == 10) {
+            answ->answer_size = def_resp.aof.answer_size;
+            answ->answer = wcalloc(answ->answer_size  * sizeof(char));
+            memcpy(answ->answer, def_resp.aof.answer, answ->answer_size);
+        }
+    }
     return DONE;
 }
 
@@ -215,12 +234,18 @@ void init_commands(void) {
     }
 }
 
+void to_lower(char* word, int size) {
+    for (int i = 0; i < size; i++) {
+        word[i] = tolower((unsigned char)word[i]);
+    }
+}
+
 // The submitted command is identified, and the corresponding function is invoked.
 process_result process_command(client_req* req, answer* answ, connection* conn) {
     command_entry* cur_command;
     int hash;
     int size_command_name;
-
+    to_lower(req->argv[0], req->argv_size[0]);
     hash = com_dict->hash_func(req->argv[0]);
     size_command_name = strlen(req->argv[0]) + 1;
     cur_command = com_dict->commands[hash]->first;

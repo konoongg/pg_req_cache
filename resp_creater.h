@@ -28,6 +28,10 @@ void init_def_resp (void);
 struct default_resp_answer {
     answer ok;
     answer pong;
+
+
+    answer aof;
+    answer save;
 };
 
 #endif

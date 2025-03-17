@@ -32,6 +32,12 @@ void init_def_resp (void) {
 
     def_resp.pong.answer = "+PONG\r\n";
     def_resp.pong.answer_size = 7;
+
+    def_resp.aof.answer = "*2\r\n$10\r\nappendonly\r\n$2\r\nno\r\n";
+    def_resp.aof.answer_size = 29;
+
+    def_resp.save.answer = "*2\r\n$4\r\nsave\r\n$0\r\n\r\n";
+    def_resp.save.answer_size = 20;
 }
 
 void create_simple_string_resp(answer* answ, char* src) {

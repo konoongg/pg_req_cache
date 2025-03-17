@@ -6,7 +6,7 @@
 #include "connection.h"
 #include "io.h"
 
-#define COMMAND_DICT_SIZE 3
+#define COMMAND_DICT_SIZE 5
 
 typedef enum process_result process_result;
 typedef struct command_dict command_dict;
