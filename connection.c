@@ -12,6 +12,8 @@
 #include "event.h"
 
 void add(connection* conn, conn_list* list) ;
+void conn_list_lock(wthread* wthrd);
+void conn_list_unlock(wthread* wthrd);
 void delete(connection* conn, conn_list* list);
 void free_wthread(wthread* wthrd);
 void init_notify(e_notify* not);
@@ -35,15 +37,14 @@ void delete(connection* conn, conn_list* list) {
     assert(list->first);
     if (conn->prev == NULL) {
         list->first = conn->next;
-        if (conn->next) {
-            conn->next->prev = NULL;
-        }
     } else {
         conn->prev->next = conn->next;
     }
 
     if (conn->next == NULL) {
         list->last = conn->prev;
+    } else {
+        conn->next->prev = conn->prev;
     }
 }
 
@@ -134,6 +135,7 @@ void move_from_active_to_wait(connection* conn) {
         ereport(INFO, errmsg("move_from_active_to_wait: pthread_spin_lock %s", strerror(err)));
         abort();
     }
+
     assert(!conn->is_wait);
     delete(conn, conn->wthrd->active);
     conn->wthrd->active_size--;
@@ -141,18 +143,15 @@ void move_from_active_to_wait(connection* conn) {
     add(conn, conn->wthrd->wait);
     conn->wthrd->wait_size++;
 
-
-
     err = pthread_spin_unlock(conn->wthrd->lock);
     if (err != 0) {
         ereport(INFO, errmsg("move_from_active_to_wait: pthread_spin_unlock %s", strerror(err)));
         abort();
     }
-
 }
 
-void move_from_wait_to_active(connection* conn) {
 
+void move_from_wait_to_active(connection* conn) {
     int err = pthread_spin_lock(conn->wthrd->lock);
     if (err != 0) {
         ereport(INFO, errmsg("move_from_wait_to_active: pthread_spin_lock %s", strerror(err)));
@@ -234,12 +233,38 @@ void init_wthread(wthread* wthrd) {
     }
 }
 
+void conn_list_lock(wthread* wthrd) {
+    int err = pthread_spin_lock(wthrd->lock);
+    if (err != 0) {
+        ereport(INFO, errmsg("conn_list_lock: pthread_spin_lock %s", strerror(err)));
+        abort();
+    }
+}
+
+void conn_list_unlock(wthread* wthrd) {
+    int err = pthread_spin_unlock(wthrd->lock);
+    if (err != 0) {
+        ereport(INFO, errmsg("conn_list_unlock: pthread_spin_unlock %s", strerror(err)));
+        abort();
+    }
+}
+
 
 void loop_step(wthread* wthrd) {
     while (wthrd->active_size != 0) {
-        connection* cur_conn = wthrd->active->first;
+        connection* cur_conn;
+
+        conn_list_lock(wthrd);
+        cur_conn = wthrd->active->first;
+        conn_list_unlock(wthrd);
+
         while (cur_conn != NULL) {
-            connection* cur_conn_next = cur_conn->next;
+            connection* cur_conn_next;
+
+            conn_list_lock(wthrd);
+            cur_conn_next = cur_conn->next;
+            conn_list_unlock(wthrd);
+
             assert(!cur_conn->is_wait);
             cur_conn->proc(cur_conn);
             cur_conn = cur_conn_next;
@@ -286,12 +311,11 @@ void event_notify(e_notify* not) {
 not_status event_get_notify(e_notify* not) {
     char code;
     int res = read(not->pipe_fd[0], &code, 1);
-
     if (res < 0 && res != EAGAIN) {
         char* err = strerror(errno);
         ereport(INFO, errmsg("notify: read error %s", err));
         abort();
-    } else if (res == 0 || res == EAGAIN) {
+    } else if ( res == EAGAIN) {
         return NOT_TA;
     }
     return NOT_OK;

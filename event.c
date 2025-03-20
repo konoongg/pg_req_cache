@@ -83,7 +83,9 @@ void callback(EV_P_ struct ev_io* io_handle, int revents) {
         free_connection(conn);
         abort();
     }
-    assert(conn->is_wait);
+    if (!conn->is_wait) {
+        assert(conn->status == NOTIFY || conn->status ==  NOTIFY_DB );
+    }
     move_from_wait_to_active(conn);
 }
 

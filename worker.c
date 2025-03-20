@@ -74,7 +74,6 @@ proc_status process_write(connection* conn) {
 
 // This event is processed solely to notify the loop that it needs to check the queue of active connections
 proc_status notify(connection* conn) {
-
     not_status not_s = event_get_notify(conn->wthrd->not);
     if (not_s == NOT_TA) {
         return ALIVE_PROC;

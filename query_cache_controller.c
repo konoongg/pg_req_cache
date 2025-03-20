@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <errno.h>
 #include <pthread.h>
 #include <stdint.h>
@@ -77,6 +78,7 @@ void register_command(char* tabl, char* req, connection* conn, com_reason reason
     }
     dbw.commands->last->next = NULL;
     dbw.commands->count_commands++;
+    assert(dbw.commands->count_commands > 0);
     event_notify(dbw.wthrd->not);
 
     dbw_unlock();
@@ -91,7 +93,7 @@ command_to_db* get_command(void) {
     cmd = dbw.commands->first;
     dbw.commands->first = dbw.commands->first->next;
     dbw.commands->count_commands--;
-
+    assert(dbw.commands->count_commands >= 0);
     if (dbw.commands->count_commands == 0) {
         dbw.commands->first = dbw.commands->last = NULL;
     }
@@ -160,7 +162,9 @@ proc_status process_read_db(connection* conn) {
         free_db_command(cmd);
 
         dbw_lock();
-        event_notify(conn->wthrd->not);
+        if (dbw.commands->count_commands != 0) {
+            event_notify(conn->wthrd->not);
+        }
         dbw_unlock();
 
         stop_event(dbw.wthrd->l, conn->r_data->handle);
@@ -169,7 +173,6 @@ proc_status process_read_db(connection* conn) {
         move_from_active_to_wait(conn);
         return WAIT_PROC;
     } else  if (res == ERR_OPER_RES) {
-        ereport(INFO, errmsg("process_read_db: res == ERR_OPER_RES"));
         abort();
     }
     return DEL_PROC;
