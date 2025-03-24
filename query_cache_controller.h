@@ -34,7 +34,7 @@ struct command_to_db {
     command_to_db* next;
     connection* conn;
     int key_size;
-};
+}; // вот тут влзникает иногда ошибка, потому что cmd содержит бред
 
 struct list_command {
     command_to_db* first;

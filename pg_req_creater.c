@@ -62,6 +62,7 @@ char* create_pg_get(char* key, int key_Size) {
     size_req = SELECT_BASE_SIZE + attr->column_size + attr->table_size + attr->value_size + 1; // \0(+1)
 
     bd_req = wcalloc(size_req * sizeof(char));
+
     snprintf(bd_req, size_req, "SELECT * FROM %s WHERE %s = '%s';", attr->table, attr->column, attr->value);
     bd_req[size_req - 1] = '\0';
     free_bd_req_attr(attr);
