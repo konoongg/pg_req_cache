@@ -61,6 +61,9 @@ struct answer {
 struct answer_list {
     answer* first;
     answer* last;
+    char* result;
+    int result_size;
+    bool create_answer;
 };
 
 // parsers status

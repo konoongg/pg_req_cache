@@ -18,7 +18,7 @@ void defalt_setting_init(void) {
     // int res;
 
     config.c_conf.count_basket = 100000; // cache basket
-    config.c_conf.ttl_s = 5; // cache ttl
+    config.c_conf.ttl_s = 0; // cache ttl
     config.c_conf.max_storage_size = (size_t)1024 * 1024 * 1024 * 1024;
     config.c_conf.max_storage_size = 10;
     config.c_conf.seed = 101; // hash seed
@@ -44,7 +44,7 @@ void defalt_setting_init(void) {
 
     config.worker_conf.backlog_size = 512; // listen socket backlog
     config.worker_conf.buffer_size = 512; // read buffer size
-    config.worker_conf.count_worker = 1;
+    config.worker_conf.count_worker = 4;
     config.worker_conf.listen_port = 6379;
 
     config.db_conf.count_backend = 4; // count libpq backend

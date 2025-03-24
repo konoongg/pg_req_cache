@@ -25,7 +25,7 @@ void replace_part_of_buffer(io_read* data, int cur_buffer_index) {
  * the received data will be processed, and the parsing state is saved. When the remaining data arrives,
  * parsing will continue correctly.
  */
-exit_status pars_data(io_read* data) {
+exit_status  pars_data(io_read* data) {
     int cur_buffer_index  = 0;
     for (; cur_buffer_index < data->cur_buffer_size; ++cur_buffer_index) {
         char c = data->read_buffer[cur_buffer_index];

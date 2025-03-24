@@ -41,34 +41,58 @@ proc_status process_write(connection* conn) {
     event_data* w_data = conn->w_data;
     answer_list* answers  = (answer_list*)w_data->data;
     answer* cur_answer = answers->first;
+    answer* next_answer = NULL;
+    int res;
 
-    while (cur_answer != NULL) {
-        int res = write(conn->fd, cur_answer->answer, cur_answer->answer_size);
-        if (res == cur_answer->answer_size) {
-            answer* next_answer = cur_answer->next;
+    if (!answers->create_answer) {
+        int write_index = 0;
+        answers->result_size = 0;
+
+        while (cur_answer != NULL) {
+            answers->result_size += cur_answer->answer_size;
+            cur_answer = cur_answer->next;
+        }
+        cur_answer = answers->first;
+        answers->result = wcalloc(answers->result_size * sizeof(char));
+
+        while (cur_answer != NULL) {
+            memcpy(answers->result  + write_index,  cur_answer->answer, cur_answer->answer_size);
+            write_index += cur_answer->answer_size;
+            next_answer = cur_answer->next;
             free_answer(cur_answer);
             cur_answer = next_answer;
-            answers->first = cur_answer;
-        } else if (res == -1) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                return ALIVE_PROC;
-            }
-            delete_active(conn);
-            finish_connection(conn);
-            return DEL_PROC;
-        } else {
-            cur_answer->answer_size -=  res;
-            memmove(cur_answer->answer, cur_answer + res, cur_answer->answer_size);
+        }
+        answers->create_answer = true;
+    }
+
+
+    res = write(conn->fd, answers->result , answers->result_size);
+
+    if (res == answers->result_size) {
+        free(answers->result);
+        answers->create_answer = false;
+    } else if (res == -1) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
             return ALIVE_PROC;
         }
+        delete_active(conn);
+        finish_connection(conn);
+        return DEL_PROC;
+    } else {
+        answers->result_size -=  res;
+        memmove(answers->result, answers->result + res, answers->result_size);
+        return ALIVE_PROC;
     }
-    answers->first = answers->last = NULL;
+
+    answers->first = answers->last =  NULL;
+    answers->result = NULL;
 
     start_event(conn->wthrd->l, conn->r_data->handle);
     stop_event(conn->wthrd->l, conn->w_data->handle);
 
     move_from_active_to_wait(conn);
     conn->proc = process_read;
+
     return WAIT_PROC;
 }
 
@@ -100,7 +124,6 @@ proc_status process_data(connection* conn) {
             conn->status = WRITE;
             conn->proc = process_write;
             start_event(conn->wthrd->l, conn->w_data->handle);
-
             move_from_active_to_wait(conn);
             return WAIT_PROC;
         }
@@ -120,8 +143,6 @@ proc_status process_data(connection* conn) {
         } else if (res == DB_REQ) {
             return WAIT_PROC;
         } else if (res == DB_APPROVE) {
-            conn->proc = process_write;
-            conn->status = WRITE;
             r_data->reqs->first = r_data->reqs->first->next;
             free_cl_req(cur_req);
             return WAIT_PROC;
@@ -137,6 +158,7 @@ proc_status process_data(connection* conn) {
 * parse all available data (e.g., if two requests are received, we process both).
 * If an error or connection closure occurs, we release the associated resources. */
 proc_status process_read(connection* conn) {
+
     exit_status status;
     int buffer_free_size;
     int res;
@@ -203,6 +225,9 @@ proc_status process_accept(connection* conn) {
     reqs->count_req = 0;
 
     a_list->first = a_list->last = NULL;
+    a_list->create_answer = false;
+    a_list->result = false;
+    a_list->result_size = 0;
 
     io_r->cur_buffer_size = 0;
     io_r->pars.cur_count_argv = 0;
