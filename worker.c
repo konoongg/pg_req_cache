@@ -61,6 +61,7 @@ proc_status process_write(connection* conn) {
             next_answer = cur_answer->next;
             free_answer(cur_answer);
             cur_answer = next_answer;
+            answers->first = cur_answer;
         }
         answers->create_answer = true;
     }
@@ -120,7 +121,8 @@ proc_status process_data(connection* conn) {
     while (true) {
         process_result res;
         cur_req = r_data->reqs->first;
-        if (cur_req == NULL) {
+
+        if (cur_req == NULL || !cur_req->is_ready) {
             conn->status = WRITE;
             conn->proc = process_write;
             start_event(conn->wthrd->l, conn->w_data->handle);
@@ -158,7 +160,6 @@ proc_status process_data(connection* conn) {
 * parse all available data (e.g., if two requests are received, we process both).
 * If an error or connection closure occurs, we release the associated resources. */
 proc_status process_read(connection* conn) {
-
     exit_status status;
     int buffer_free_size;
     int res;
@@ -181,7 +182,7 @@ proc_status process_read(connection* conn) {
             stop_event(wthrd.l, conn->r_data->handle);
             conn->status = PROCESS;
             conn->proc = process_data;
-
+            io_r_data->cur_buffer_size = 0;
             return ALIVE_PROC;
         } else if (status == NOT_ALL) {
             move_from_active_to_wait(conn);

@@ -26,9 +26,10 @@ void replace_part_of_buffer(io_read* data, int cur_buffer_index) {
  * parsing will continue correctly.
  */
 exit_status  pars_data(io_read* data) {
-    int cur_buffer_index  = 0;
+    int cur_buffer_index = 0;
     for (; cur_buffer_index < data->cur_buffer_size; ++cur_buffer_index) {
         char c = data->read_buffer[cur_buffer_index];
+
         read_status cur_status = data->pars.cur_read_status;
         char* new_str;
 
@@ -37,7 +38,6 @@ exit_status  pars_data(io_read* data) {
         } else if ((c >= '0' && c <= '9')  && (cur_status == NUM_WAIT || cur_status == ARGC_WAIT) ) {
             data->pars.parsing_num = (data->pars.parsing_num * 10) + (c - '0');
         } else if (c == '\r' && cur_status == ARGC_WAIT) {
-
             if (data->reqs->first == NULL) {
                 data->reqs->first = (client_req*)wcalloc(sizeof(client_req));
                 data->reqs->last = data->reqs->first;
@@ -46,6 +46,7 @@ exit_status  pars_data(io_read* data) {
                 data->reqs->last = data->reqs->last->next;
             }
             data->reqs->last->next = NULL;
+            data->reqs->last->is_ready = false;;
             data->reqs->last->argc = data->pars.parsing_num;
             data->reqs->last->argv = wcalloc(data->reqs->last->argc * sizeof(char*));
             data->reqs->last->argv_size = wcalloc(data->reqs->last->argc * sizeof(int));
@@ -95,6 +96,7 @@ exit_status  pars_data(io_read* data) {
         } else if(cur_status == END) {
             replace_part_of_buffer(data, cur_buffer_index);
             data->pars.cur_read_status = ARRAY_WAIT;
+            data->reqs->last->is_ready = true;
             return ALL;
         } else {
             return ERR;
@@ -103,6 +105,7 @@ exit_status  pars_data(io_read* data) {
 
     if(data->pars.cur_read_status == END) {
         data->pars.cur_read_status = ARRAY_WAIT;
+        data->reqs->last->is_ready = true;
         replace_part_of_buffer(data, cur_buffer_index);
         return ALL;
     }
