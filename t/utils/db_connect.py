@@ -14,7 +14,7 @@ def create_table_text_text(db_name):
     )
     cursor = conn.cursor()
 
-    table_name = "test_table"
+    table_name = "test"
 
     query = sql.SQL("""
     CREATE TABLE IF NOT EXISTS {} (
@@ -56,16 +56,29 @@ def create_table_text_int(db_name):
     return table_name
 
 
-
-
-def restart_postgres():
-    try:
-        subprocess.run(["make", "clean", "-C", f"{POSTGRESQL_PATH}/contrib/pg_redis_proxy"], check=True)
-        subprocess.run(["make", "install", "-C", f"{POSTGRESQL_PATH}/contrib/pg_redis_proxy"], check=True)
-        subprocess.run(["pg_ctl", "-D", "redis_proxy", "stop", "-m", "immediate"], cwd=DB_PATH, check=True)
-        subprocess.run(["pg_ctl", "-D", "redis_proxy", "-l", "logfile", "start"], cwd=DB_PATH, check=True)
-    except subprocess.CalledProcessError as e:
-        pytest.fail(f"Ошибка при выполнении команд: {e}")
+def restart_postgres(timeout: int = 100) -> None:
+    """Перезапускает PostgreSQL без вывода команд в консоль"""
+    commands: List[List[str]] = [
+        ["make", "clean", "-C", f"{POSTGRESQL_PATH}/contrib/pg_redis_proxy"],
+        ["make", "install", "-C", f"{POSTGRESQL_PATH}/contrib/pg_redis_proxy"],
+        ["pg_ctl", "-D", "redis_proxy", "stop", "-m", "immediate"],
+        ["pg_ctl", "-D", "redis_proxy", "-l", "logfile", "start"]
+    ]
+    
+    for cmd in commands:
+        try:
+            subprocess.run(
+                cmd,
+                cwd=DB_PATH if "pg_ctl" in cmd[0] else None,
+                check=True,
+                timeout=timeout,
+                stdout=subprocess.DEVNULL,  # Подавляем stdout
+                stderr=subprocess.DEVNULL   # Подавляем stderr
+            )
+        except subprocess.TimeoutExpired:
+            pytest.fail(f"Команда {cmd} не завершилась за {timeout} секунд")
+        except subprocess.CalledProcessError as e:
+            pytest.fail(f"Ошибка при выполнении {cmd}: {e}")
 
 
 def open_table(db_name):

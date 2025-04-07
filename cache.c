@@ -145,9 +145,19 @@ cache_basket* get_basket(char* key, int key_size) {
     kv_storage* storage;
     u_int64_t hash;
 
+    FILE *hash_log;
+
     storage = c->storage;
     hash = storage->hash_func(key, key_size, NULL);
 
+    hash_log = fopen("/home/konoongg/home/work/db/hash.txt", "a");
+    if (hash_log == NULL) {
+        // Если не удалось открыть файл, пишем в лог и продолжаем работу
+    } else {
+        // Записываем хеш и ключ в файл
+        fprintf(hash_log, "hash: %lu\n", hash);
+        fclose(hash_log);
+    }
     return &(storage->kv[hash]);
 }
 

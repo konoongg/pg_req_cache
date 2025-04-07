@@ -25,7 +25,7 @@ def test_simple_set_table_tt(create_and_drop_db, cleanup_schema):
     response = sock.recv(1024)
     assert response == answer, f"Ожидался ответ {answer}, но получен: {response}"
 
-    cursor.execute("SELECT * FROM test_table WHERE column1 = %s AND column2 = %s", ("test1", "test2"))
+    cursor.execute("SELECT * FROM test WHERE column1 = %s AND column2 = %s", ("test1", "test2"))
     result = cursor.fetchone()
 
     assert result is not None, "Строка с column1=test1 и column2=test2 не найдена в таблице"
@@ -51,7 +51,7 @@ def test_simple_double_set_table_tt(create_and_drop_db, cleanup_schema):
     response = sock.recv(1024)
     assert response == answer, f"Ожидался ответ {answer}, но получен: {response}"
 
-    cursor.execute("SELECT * FROM test_table WHERE column1 = %s AND column2 = %s", ("test1", "test2"))
+    cursor.execute("SELECT * FROM test WHERE column1 = %s AND column2 = %s", ("test1", "test2"))
     result = cursor.fetchone()
     assert result is not None, "Строка с column1=test1 и column2=test2 не найдена в таблице"
 
@@ -67,7 +67,7 @@ def test_simple_double_set_table_tt(create_and_drop_db, cleanup_schema):
 
     response = sock.recv(1024)
     assert response == answer, f"Ожидался ответ {answer}, но получен: {response}"
-    cursor.execute("SELECT * FROM test_table WHERE column1 = %s AND column2 = %s", ("test11", "test22"))
+    cursor.execute("SELECT * FROM test WHERE column1 = %s AND column2 = %s", ("test11", "test22"))
     result = cursor.fetchone()
     assert result is not None, "Строка с column1=test11 и column2=test22 не найдена в таблице"
 

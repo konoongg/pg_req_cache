@@ -149,7 +149,6 @@ uint64_t murmur_hash_2(void* key, int len, void* argv) {
     h *= m;
     h ^= h >> 15;
     h %=  config.c_conf.count_basket;
-    //ereport(INFO, errmsg("murmur_hash_2: key %s hash %d", key, h));
     return h;
 }
 
