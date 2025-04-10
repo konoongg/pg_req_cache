@@ -17,7 +17,7 @@ class Colors:
     UNDERLINE = '\033[4m'
 
 
-def test_t1_p1_n1000000_get_table_tt(create_and_drop_db, cleanup_schema):
+def test_t1_p1_n100000_del_table_tt(create_and_drop_db, cleanup_schema):
     db_name = create_and_drop_db
     table_name, columns = create_table_text_text(db_name)
     restart_postgres(100)
@@ -27,14 +27,25 @@ def test_t1_p1_n1000000_get_table_tt(create_and_drop_db, cleanup_schema):
         "pipelines": 1,
         "port": 6379,
         "clients": 1000,
-        "requests": 1000000,
+        "requests": 100000,
         "threads": 1,
         "table_name": table_name,
         "key_column": columns[0],
     }
 
+    prepare_params = {
+        "pipelines": 4,
+        "port": 6379,
+        "clients": 1000,
+        "requests": 100000,
+        "threads": 1,
+        "table_name": table_name,
+        "columns": columns,
+    }
+
+    prepare_test_data(table_name, prepare_params)
     # Generate benchmark command
-    benchmark_cmd = redis_bench_create_get(**benchmark_params)
+    benchmark_cmd = redis_bench_create_del(**benchmark_params)
     print(f"\nExecuting Redis benchmark: {benchmark_cmd}")
     for i in range (5):
         try:
@@ -49,7 +60,7 @@ def test_t1_p1_n1000000_get_table_tt(create_and_drop_db, cleanup_schema):
         except subprocess.CalledProcessError as e:
             pytest.fail(f"Benchmark failed with code {e.returncode}")
 
-def test_t4_p1_n1000000_get_table_tt(create_and_drop_db, cleanup_schema):
+def test_t4_p1_n100000_del_table_tt(create_and_drop_db, cleanup_schema):
     db_name = create_and_drop_db
     table_name, columns = create_table_text_text(db_name)
     restart_postgres(100)
@@ -59,14 +70,25 @@ def test_t4_p1_n1000000_get_table_tt(create_and_drop_db, cleanup_schema):
         "pipelines": 1,
         "port": 6379,
         "clients": 1000,
-        "requests": 1000000,
+        "requests": 100000,
         "threads": 4,
         "table_name": table_name,
         "key_column": columns[0],
     }
 
+    prepare_params = {
+        "pipelines": 4,
+        "port": 6379,
+        "clients": 1000,
+        "requests": 100000,
+        "threads": 1,
+        "table_name": table_name,
+        "columns": columns,
+    }
+
+    prepare_test_data(table_name, prepare_params)
     # Generate benchmark command
-    benchmark_cmd = redis_bench_create_get(**benchmark_params)
+    benchmark_cmd = redis_bench_create_del(**benchmark_params)
     print(f"\nExecuting Redis benchmark: {benchmark_cmd}")
     for i in range (5):
         try:
@@ -81,7 +103,7 @@ def test_t4_p1_n1000000_get_table_tt(create_and_drop_db, cleanup_schema):
         except subprocess.CalledProcessError as e:
             pytest.fail(f"Benchmark failed with code {e.returncode}")
 
-def test_t4_p4_n1000000_get_table_tt(create_and_drop_db, cleanup_schema):
+def test_t4_p4_n100000_del_table_tt(create_and_drop_db, cleanup_schema):
     db_name = create_and_drop_db
     table_name, columns = create_table_text_text(db_name)
     restart_postgres(100)
@@ -91,14 +113,24 @@ def test_t4_p4_n1000000_get_table_tt(create_and_drop_db, cleanup_schema):
         "pipelines": 4,
         "port": 6379,
         "clients": 1000,
-        "requests": 1000000,
+        "requests": 100000,
         "threads": 4,
         "table_name": table_name,
         "key_column": columns[0],
     }
+    prepare_params = {
+        "pipelines": 4,
+        "port": 6379,
+        "clients": 1000,
+        "requests": 100000,
+        "threads": 1,
+        "table_name": table_name,
+        "columns": columns,
+    }
 
+    prepare_test_data(table_name, prepare_params)
     # Generate benchmark command
-    benchmark_cmd = redis_bench_create_get(**benchmark_params)
+    benchmark_cmd = redis_bench_create_del(**benchmark_params)
     print(f"\nExecuting Redis benchmark: {benchmark_cmd}")
     for i in range (5):
         try:
@@ -114,7 +146,7 @@ def test_t4_p4_n1000000_get_table_tt(create_and_drop_db, cleanup_schema):
             pytest.fail(f"Benchmark failed with code {e.returncode}")
 
 
-def test_t8_p8_n1000000_get_table_tt(create_and_drop_db, cleanup_schema):
+def test_t8_p8_n100000_del_table_tt(create_and_drop_db, cleanup_schema):
     db_name = create_and_drop_db
     table_name, columns = create_table_text_text(db_name)
     restart_postgres(100)
@@ -124,14 +156,24 @@ def test_t8_p8_n1000000_get_table_tt(create_and_drop_db, cleanup_schema):
         "pipelines": 8,
         "port": 6379,
         "clients": 1000,
-        "requests": 1000000,
+        "requests": 100000,
         "threads": 8,
         "table_name": table_name,
         "key_column": columns[0],
     }
+    prepare_params = {
+        "pipelines": 4,
+        "port": 6379,
+        "clients": 1000,
+        "requests": 100000,
+        "threads": 1,
+        "table_name": table_name,
+        "columns": columns,
+    }
 
+    prepare_test_data(table_name, prepare_params)
     # Generate benchmark command
-    benchmark_cmd = redis_bench_create_get(**benchmark_params)
+    benchmark_cmd = redis_bench_create_del(**benchmark_params)
     print(f"\nExecuting Redis benchmark: {benchmark_cmd}")
     for i in range (5):
         try:
@@ -148,7 +190,7 @@ def test_t8_p8_n1000000_get_table_tt(create_and_drop_db, cleanup_schema):
 
 
 
-def test_t1_p4_n1000000_get_table_tt(create_and_drop_db, cleanup_schema):
+def test_t1_p4_n100000_del_table_tt(create_and_drop_db, cleanup_schema):
     db_name = create_and_drop_db
     table_name, columns = create_table_text_text(db_name)
     restart_postgres(100)
@@ -158,14 +200,24 @@ def test_t1_p4_n1000000_get_table_tt(create_and_drop_db, cleanup_schema):
         "pipelines": 4,
         "port": 6379,
         "clients": 1000,
-        "requests": 1000000,
+        "requests": 100000,
         "threads": 1,
         "table_name": table_name,
         "key_column": columns[0],
     }
+    prepare_params = {
+        "pipelines": 4,
+        "port": 6379,
+        "clients": 1000,
+        "requests": 100000,
+        "threads": 1,
+        "table_name": table_name,
+        "columns": columns,
+    }
 
+    prepare_test_data(table_name, prepare_params)
     # Generate benchmark command
-    benchmark_cmd = redis_bench_create_get(**benchmark_params)
+    benchmark_cmd = redis_bench_create_del(**benchmark_params)
     print(f"\nExecuting Redis benchmark: {benchmark_cmd}")
     for i in range (5):
         try:

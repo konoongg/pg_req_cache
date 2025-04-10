@@ -6,11 +6,10 @@ from t.utils.create_resp import *
 from t.utils.db_connect import *
 
 def test_t1_p1_n100000_set_table_tt(create_and_drop_db, cleanup_schema):
+    print("START TEST 1")
     db_name = create_and_drop_db
-    table_name = create_table_text_text(db_name)
+    table_name, columns= create_table_text_text(db_name)
     restart_postgres(100)
-    cursor = open_table(db_name)
-    sock = create_socket()
 
     # Redis benchmark setup
     benchmark_params = {
@@ -19,13 +18,12 @@ def test_t1_p1_n100000_set_table_tt(create_and_drop_db, cleanup_schema):
         "clients": 1000,
         "requests": 100000,
         "threads": 1,
-        "db_name": table_name,
-        "columns": ["column1", "column2"],
-        "command": "set"
+        "table_name": table_name,
+        "columns": columns,
     }
 
     # Generate benchmark command
-    benchmark_cmd = redis_bench_create(**benchmark_params)
+    benchmark_cmd = redis_bench_create_set(**benchmark_params)
     print(f"\nExecuting Redis benchmark: {benchmark_cmd}")
 
     try:
@@ -41,11 +39,11 @@ def test_t1_p1_n100000_set_table_tt(create_and_drop_db, cleanup_schema):
         pytest.fail(f"Benchmark failed with code {e.returncode}")
 
 def test_t4_p1_n100000_set_table_tt(create_and_drop_db, cleanup_schema):
+
+    print("START TEST 2")
     db_name = create_and_drop_db
-    table_name = create_table_text_text(db_name)
+    table_name, columns= create_table_text_text(db_name)
     restart_postgres(100)
-    cursor = open_table(db_name)
-    sock = create_socket()
 
     # Redis benchmark setup
     benchmark_params = {
@@ -54,13 +52,12 @@ def test_t4_p1_n100000_set_table_tt(create_and_drop_db, cleanup_schema):
         "clients": 1000,
         "requests": 100000,
         "threads": 4,
-        "db_name": table_name,
-        "columns": ["column1", "column2"],
-        "command": "set"
+        "table_name": table_name,
+        "columns": columns,
     }
 
     # Generate benchmark command
-    benchmark_cmd = redis_bench_create(**benchmark_params)
+    benchmark_cmd = redis_bench_create_set(**benchmark_params)
     print(f"\nExecuting Redis benchmark: {benchmark_cmd}")
 
     try:
@@ -77,10 +74,8 @@ def test_t4_p1_n100000_set_table_tt(create_and_drop_db, cleanup_schema):
 
 def test_t4_p4_n100000_set_table_tt(create_and_drop_db, cleanup_schema):
     db_name = create_and_drop_db
-    table_name = create_table_text_text(db_name)
+    table_name, columns= create_table_text_text(db_name)
     restart_postgres(100)
-    cursor = open_table(db_name)
-    sock = create_socket()
 
     # Redis benchmark setup
     benchmark_params = {
@@ -89,13 +84,12 @@ def test_t4_p4_n100000_set_table_tt(create_and_drop_db, cleanup_schema):
         "clients": 1000,
         "requests": 100000,
         "threads": 4,
-        "db_name": table_name,
-        "columns": ["column1", "column2"],
-        "command": "set"
+        "table_name": table_name,
+        "columns": columns,
     }
 
     # Generate benchmark command
-    benchmark_cmd = redis_bench_create(**benchmark_params)
+    benchmark_cmd = redis_bench_create_set(**benchmark_params)
     print(f"\nExecuting Redis benchmark: {benchmark_cmd}")
 
     try:
@@ -113,10 +107,8 @@ def test_t4_p4_n100000_set_table_tt(create_and_drop_db, cleanup_schema):
 
 def test_t8_p8_n100000_set_table_tt(create_and_drop_db, cleanup_schema):
     db_name = create_and_drop_db
-    table_name = create_table_text_text(db_name)
+    table_name, columns= create_table_text_text(db_name)
     restart_postgres(100)
-    cursor = open_table(db_name)
-    sock = create_socket()
 
     # Redis benchmark setup
     benchmark_params = {
@@ -125,13 +117,12 @@ def test_t8_p8_n100000_set_table_tt(create_and_drop_db, cleanup_schema):
         "clients": 1000,
         "requests": 100000,
         "threads": 8,
-        "db_name": table_name,
-        "columns": ["column1", "column2"],
-        "command": "set"
+        "table_name": table_name,
+        "columns": columns,
     }
 
     # Generate benchmark command
-    benchmark_cmd = redis_bench_create(**benchmark_params)
+    benchmark_cmd = redis_bench_create_set(**benchmark_params)
     print(f"\nExecuting Redis benchmark: {benchmark_cmd}")
 
     try:
@@ -149,11 +140,8 @@ def test_t8_p8_n100000_set_table_tt(create_and_drop_db, cleanup_schema):
 
 def test_t4_p1_n100000_set_table_tt(create_and_drop_db, cleanup_schema):
     db_name = create_and_drop_db
-    table_name = create_table_text_text(db_name)
-    restart_postgres(100)
-    cursor = open_table(db_name)
-    sock = create_socket()
-
+    table_name, columns = create_table_text_text(db_name)
+    restart_postgres(100)  
     # Redis benchmark setup
     benchmark_params = {
         "pipelines": 1,
@@ -161,13 +149,12 @@ def test_t4_p1_n100000_set_table_tt(create_and_drop_db, cleanup_schema):
         "clients": 1000,
         "requests": 100000,
         "threads": 4,
-        "db_name": table_name,
-        "columns": ["column1", "column2"],
-        "command": "set"
+        "table_name": table_name,
+        "columns": columns,
     }
 
     # Generate benchmark command
-    benchmark_cmd = redis_bench_create(**benchmark_params)
+    benchmark_cmd = redis_bench_create_set(**benchmark_params)
     print(f"\nExecuting Redis benchmark: {benchmark_cmd}")
 
     try:
@@ -185,10 +172,8 @@ def test_t4_p1_n100000_set_table_tt(create_and_drop_db, cleanup_schema):
 
 def test_t1_p4_n100000_set_table_tt(create_and_drop_db, cleanup_schema):
     db_name = create_and_drop_db
-    table_name = create_table_text_text(db_name)
+    table_name, columns = create_table_text_text(db_name)
     restart_postgres(100)
-    cursor = open_table(db_name)
-    sock = create_socket()
 
     # Redis benchmark setup
     benchmark_params = {
@@ -197,13 +182,12 @@ def test_t1_p4_n100000_set_table_tt(create_and_drop_db, cleanup_schema):
         "clients": 1000,
         "requests": 100000,
         "threads": 1,
-        "db_name": table_name,
-        "columns": ["column1", "column2"],
-        "command": "set"
+        "table_name": table_name,
+        "columns": columns,
     }
 
     # Generate benchmark command
-    benchmark_cmd = redis_bench_create(**benchmark_params)
+    benchmark_cmd = redis_bench_create_set(**benchmark_params)
     print(f"\nExecuting Redis benchmark: {benchmark_cmd}")
 
     try:

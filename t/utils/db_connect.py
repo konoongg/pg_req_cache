@@ -1,3 +1,4 @@
+from typing import List
 from psycopg2 import sql
 
 import psycopg2
@@ -15,7 +16,7 @@ def create_table_text_text(db_name):
     cursor = conn.cursor()
 
     table_name = "test"
-
+    columns = ["column1", "column2"]
     query = sql.SQL("""
     CREATE TABLE IF NOT EXISTS {} (
         column1 TEXT UNIQUE,
@@ -29,7 +30,7 @@ def create_table_text_text(db_name):
     cursor.close()
     conn.close()
 
-    return table_name
+    return table_name, columns
 
 
 def create_table_text_int(db_name):
@@ -39,7 +40,7 @@ def create_table_text_int(db_name):
     cursor = conn.cursor()
 
     table_name = "test_table"
-
+    columns = ["column1", "column2"]
     query = sql.SQL("""
     CREATE TABLE IF NOT EXISTS {} (
         column1 TEXT UNIQUE,
@@ -53,7 +54,7 @@ def create_table_text_int(db_name):
     cursor.close()
     conn.close()
 
-    return table_name
+    return table_name, columns
 
 
 def restart_postgres(timeout: int = 100) -> None:
@@ -90,5 +91,6 @@ def open_table(db_name):
 
 def create_socket():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.connect(("localhost", 6379))
     return sock
