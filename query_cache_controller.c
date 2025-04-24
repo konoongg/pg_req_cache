@@ -90,6 +90,11 @@ command_to_db* get_command(void) {
 
     dbw_lock();
 
+    if (dbw.commands->first == NULL) {
+        dbw_unlock();
+        return NULL;
+    }
+
     cmd = dbw.commands->first;
     dbw.commands->first = dbw.commands->first->next;
     dbw.commands->count_commands--;
@@ -142,10 +147,6 @@ proc_status process_read_db(connection* conn) {
     req_table* req;
     db_oper_res res = read_from_db(back->conn_with_db, cmd->table, &req);
     if (res == READ_OPER_RES) {
-        back->is_free = true;
-        move_from_active_to_wait(conn);
-        conn->proc = notify_db;
-        conn->status = NOTIFY_DB;
         move_from_wait_to_active(cmd->conn);
 
         cmd = conn->w_data->data;
@@ -160,15 +161,22 @@ proc_status process_read_db(connection* conn) {
         }
 
         free_db_command(cmd);
-
-        dbw_lock();
-        if (dbw.commands->count_commands != 0) {
-            event_notify(conn->wthrd->not);
-        }
-        dbw_unlock();
-
         stop_event(dbw.wthrd->l, conn->r_data->handle);
-        return WAIT_PROC;
+
+        conn->w_data->data = get_command();
+        if (conn->w_data->data == NULL) {
+            back->is_free = true;
+            conn->proc = notify_db;
+            conn->status = NOTIFY_DB;
+            move_from_active_to_wait(conn);
+            return WAIT_PROC;
+        }
+
+        conn->proc = process_write_db;
+        conn->status = WRITE_DB;
+        start_event(dbw.wthrd->l, conn->w_data->handle);
+        return ALIVE_PROC;
+
     } else if (res == WAIT_OPER_RES) {
         move_from_active_to_wait(conn);
         return WAIT_PROC;
@@ -195,10 +203,13 @@ proc_status notify_db(connection* conn) {
         return ALIVE_PROC;
     }
 
+    dbw_lock();
     if (dbw.commands->count_commands == 0) {
         move_from_active_to_wait(conn);
         return WAIT_PROC;
     }
+    dbw_unlock();
+
 
     for (int i = 0; i < dbw.count_backends; ++i) {
         if (dbw.backends[i].is_free) {

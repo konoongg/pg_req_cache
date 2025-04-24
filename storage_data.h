@@ -54,7 +54,7 @@ struct key_info {
     char* value;
 
     int table_column_size;
-    int velue_size;
+    int value_size;
 };
 
 struct req_column {

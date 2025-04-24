@@ -42,29 +42,11 @@ void init_cache(void) {
 * If the data does not exist, it returns NULL.
 */
 value* get_cache(key_info* key_i) {
-    cache_basket* basket;
-    cache_data* data;
-    value* result;
-
-    result = NULL;
-
-    basket = get_basket(key, key_size);
-
-    basket_lock(basket, true);
-    data = basket->first;
-    while (data != NULL) {
-        if (memcmp(data->key, key, key_size) == 0 && data->key_size == key_size) {
-            break;
-        }
-        data = data->next;
+    hash_table* values = get_data(c->tables, key_i->table_column, key_i->table_column_size);
+    if (values == NULL) {
+        return NULL;
     }
-
-
-    if (data != NULL) {
-        result = create_copy_data(data->v);
-    }
-
-    basket_unlock(basket);
+    value* result = get_data(c->tables, key_i->value, key_i->value_size);
     return result;
 }
 
@@ -120,42 +102,12 @@ void set_cache(key_info* key_i) {
     basket_unlock(basket);
 }
 
-int delete_cache(char* key, int key_size) {
-    cache_basket* basket;
-    cache_data* data;
-    cache_data* prev_data;
-
-    basket = get_basket(key, key_size);
-
-    basket_lock(basket, false);
-
-    data = basket->first;
-    prev_data = NULL;
-    while (data != NULL) {
-        if (memcmp(data->key, key, key_size) == 0 && data->key_size == key_size) {
-            break;
-        }
-        prev_data = data;
-        data = data->next;
-    }
-
-    if (data == NULL) {
-        basket_unlock(basket);
+int delete_cache(key_info* key_i) {
+    hash_table* values = get_data(c->tables, key_i->table_column, key_i->table_column_size);
+    if (values == NULL) {
         return 0;
-    } else if (data == basket->first) {
-        basket->first = data->next;
-    } else {
-        prev_data->next = data->next;
     }
-
-    if (data->next == NULL) {
-        basket->last = prev_data;
-    }
-
-    free_data_from_cache(data);
-
-    basket_unlock(basket);
-    return 1;
+    return delete_data(values, key_i->value, key_i->value_size);
 }
 
 void free_cache(void) {

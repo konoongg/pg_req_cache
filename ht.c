@@ -162,35 +162,6 @@ void* get_data(hash_table* ht, char* key, int key_size) {
     return result;
 }
 
-void* get_or_create_data(hash_table* ht, char* key, int key_size, ht_data* (*create_ht_data)(void* data), void* data) {
-    ht_basket* basket;
-    ht_data* data;
-    void* result = NULL;
-
-    basket = get_basket(ht, key, key_size);
-    basket_lock(basket, read_lock);
-    data = find_data_in_basket(basket, key, key_size);
-
-    if (data != NULL) {
-        result = data->copy(data->v);
-    } else {
-        ht_data* new_data = create_ht_data(data);
-        if (basket->first == NULL) {
-            data = basket->first = basket->last = wcalloc(sizeof(ht_data));
-        } else {
-            basket->last->next = wcalloc(sizeof(ht_data));
-            data = basket->last = basket->last->next;
-        }
-        data->next = NULL;
-        data->key_size = new_data->key_size;
-        data->key = new_data->key;
-        data->v = new_data->v;
-    }
-
-    basket_unlock(basket);
-    return result;
-}
-
 
 void set_data(hash_table* ht, ht_data* new_data) {
     ht_basket* basket;
