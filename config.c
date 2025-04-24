@@ -14,33 +14,12 @@ void defalt_setting_init(void);
 extern config_redis config;
 
 void defalt_setting_init(void) {
-    // FILE* fp;
-    // int res;
 
-    config.c_conf.count_basket = 100000; // cache basket
+    config.c_conf.count_basket_value = 100003; // cache basket
+    config.c_conf.count_basket_table = 101; // cache basket
     config.c_conf.ttl_s = 0; // cache ttl
     config.c_conf.max_storage_size = (size_t)1024 * 1024 * 1024 * 1024;
-    config.c_conf.max_storage_size = 10;
     config.c_conf.seed = 101; // hash seed
-
-    // fp = fopen("/dev/urandom","r");
-    // if (fp == NULL) {
-    //     char* err = strerror(errno);
-    //     ereport(INFO, errmsg("defalt_setting_init: fopen error %s", err));
-    //     abort();
-    // }
-    // res = fread(&(config.c_conf.seed), sizeof(uint8_t),1 , fp);
-
-    // if (res != 1) {
-    //     ereport(INFO, errmsg("defalt_setting_init: fread error"));
-    //     abort();
-    // }
-
-    // if (fclose(fp) == 0) {
-    //     char* err = strerror(errno);
-    //     ereport(INFO, errmsg("defalt_setting_init: fclose error %s", err));
-    //     abort();
-    // }
 
     config.worker_conf.backlog_size = 512; // listen socket backlog
     config.worker_conf.buffer_size = 512; // read buffer size

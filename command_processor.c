@@ -19,12 +19,11 @@ extern config_redis config;
 extern default_resp_answer def_resp;
 command_dict* com_dict;
 
-char* get_column(char* key);
-char* get_table_name(char* key);
+key_info* create_key_info(char* key);
+process_result do_config(client_req* cl_req, answer* answ, connection* conn);
 process_result do_del(client_req* cl_req, answer* answ, connection* conn);
 process_result do_get(client_req* cl_req, answer* answ, connection* conn);
 process_result do_ping(client_req* cl_req, answer* answ, connection* conn);
-process_result do_config(client_req* cl_req, answer* answ, connection* conn);
 process_result do_set(client_req* cl_req, answer* answ, connection* conn);
 void free_command(int hash);
 void to_lower(char* word, int size);
@@ -38,41 +37,46 @@ redis_command commands[] = {
     {"config", do_config}
 };
 
-// Extracting the table name from the key.
-char* get_table_name(char* key) {
-    char* dot_position = strchr(key, '.');
 
-    if (dot_position != NULL) {
-        int length = dot_position - key;
-        char* table_name = wcalloc((length + 1) * sizeof(char));
-        memcpy(table_name, key, length);
-        table_name[length] = '\0';
-        return table_name;
-    } else {
-        return NULL;
-    }
-}
-
-char* get_column(char* key) {
+key_info* create_key_info(char* key) {
+    key_info* key_i = wcalloc(sizeof(key_info));
     char* dot_position_s;
     char* dot_position_f;
-    int length;
-    char* table_column;
+
 
     dot_position_f = strchr(key, '.');
     if (dot_position_f == NULL) {
         return NULL;
     }
+
     dot_position_s = strchr(dot_position_f + 1, '.');
     if (dot_position_s == NULL) {
         return NULL;
     }
 
-    length = dot_position_s - dot_position_f - 1;
-    table_column = wcalloc((length + 1) * sizeof(char));
-    memcpy(table_column, dot_position_f + 1, length);
-    table_column[length] = '\0';
-    return table_column;
+    key_i->table_length = dot_position_s - key;
+    key_i->table = wcalloc((key_i->table_length + 1) * sizeof(char));
+    memcpy(key_i->table, key, key_i->table_length);
+    key_i->table[key_i->table_length] = '\0';
+
+    key_i->column_length = dot_position_s - dot_position_f - 1;
+    key_i->column = wcalloc((key_i->column_length + 1) * sizeof(char));
+    memcpy(key_i->column, dot_position_f + 1, key_i->column_size);
+    key_i->column[key_i->column_length] = '\0';
+
+    key_i->value_length = strlen(key) - dot_position_s - 1;
+    key_i->value = wcalloc((key_i->value_length + 1) * sizeof(char));
+    memcpy(key_i->value, dot_position_s + 1, key_i->value_length);
+    key_i->value[key_i->value_length] = '\0';
+
+    return key_i;
+}
+
+void destroy_key_info(key_info* key_i) {
+    free(key_i->column);
+    free(key_i->table);
+    free(key_i->value);
+    free(key_i);
 }
 
 
@@ -111,17 +115,19 @@ process_result do_config(client_req* req, answer* answ, connection* conn) {
 process_result do_get(client_req* cl_req, answer* answ, connection* conn) {
     char* key = cl_req->argv[1];
     int key_size = cl_req->argv_size[1];
-    value* v = get_cache(key, key_size);
+    key_info* key_i = create_key_info(key);
+    value* v = get_cache(key_i);
 
     if (v == NULL) {
         char* table_name = get_table_name(key);
         char* req_to_db = create_pg_get(key, key_size);
         move_from_active_to_wait(conn);
         register_command(table_name, req_to_db, conn, CACHE_UPDATE, key, key_size);
-
+        destroy_key_info(key_i);
         return DB_REQ;
     }
 
+    destroy_key_info(key_i);
     create_array_resp(answ, v);
     free_values(v);
     return DONE;
@@ -143,8 +149,9 @@ process_result do_set(client_req* cl_req, answer* answ, connection* conn) {
     char* key_column;
     char* req_to_db;
 
-    req_table* new_req  = create_req_by_resp(value, value_size);
+    req_table* new_req = create_req_by_resp(value, value_size);
     cache_data* data;
+
 
     new_req->table = get_table_name(key);
     key_column = get_column(key);

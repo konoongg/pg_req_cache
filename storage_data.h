@@ -7,7 +7,7 @@
 
 typedef enum db_type db_type;
 typedef struct attr attr;
-typedef struct cache_data cache_data;
+typedef struct key_info key_info;
 typedef struct req_column req_column;
 typedef struct req_table req_table;
 typedef struct string string;
@@ -49,14 +49,12 @@ struct value {
     int count_tuples;
 };
 
-//A data structure describing the data stored in the cache.
-struct cache_data {
-    value* v;
-    cache_data* next;
-    char* key;
-    int key_size;
-    time_t last_time;
-    size_t cache_data_size;
+struct key_info {
+    char* table_column;
+    char* value;
+
+    int table_column_size;
+    int velue_size;
 };
 
 struct req_column {
