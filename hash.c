@@ -54,44 +54,40 @@ int hash_pow_31_mod_100(char* key) {
 }
 
 
-uint64_t murmur_hash_2(void* key, int len, void* argv) {
-    const unsigned int m = 0x5bd1e995;
-    const unsigned int seed = 0;
-    const int r = 24;
-    unsigned int k = 0;
+static inline uint32_t murmur_32_scramble(uint32_t k) {
+    k *= 0xcc9e2d51;
+    k = (k << 15) | (k >> 17);
+    k *= 0x1b873593;
+    return k;
+}
 
-    unsigned int h = seed ^ len;
-    const unsigned char * data = (const unsigned char *)key;
+uint64_t murmur_hash_3(void* key, int len, void* argv) {
+    const uint8_t* key_ptr = (const uint8_t*)key;
 
-    while (len >= 4) {
-        k = data[0];
-        k |= data[1];
-        k |= data[2];
-        k |= data[3];
-
-        k *= m;
-        k ^= k >> r;
-        k *= m;
-
-        h *= m;
-        h ^=k;
-        data +=4;
-        len -= 4;
+    uint32_t h = 0x9747b28c;
+    uint32_t k;
+    for (size_t i = len >> 2; i; i--) {
+        memcpy(&k, key_ptr, sizeof(uint32_t));
+        key_ptr += sizeof(uint32_t);
+        h ^= murmur_32_scramble(k);
+        h = (h << 13) | (h >> 19);
+        h = h * 5 + 0xe6546b64;
     }
 
-    if (len == 3) {
-        h ^= data[2] << 16;
-    }
-    if (len >= 2) {
-        h ^= data[1] << 8;
-    }
-    if (len >= 1) {
-        h ^= data[0];
+    k = 0;
+    for (size_t i = len & 3; i; i--) {
+        k <<= 8;
+        k |= key_ptr[i - 1];
     }
 
+    h ^= murmur_32_scramble(k);
+    /* Finalize. */
+    h ^= len;
+    h ^= h >> 16;
+    h *= 0x85ebca6b;
     h ^= h >> 13;
-    h *= m;
-    h ^= h >> 15;
+    h *= 0xc2b2ae35;
+    h ^= h >> 16;
     h %=  config.c_conf.count_basket;
     return h;
 }

@@ -150,11 +150,7 @@ process_result do_set(client_req* cl_req, answer* answ, connection* conn) {
     char* req_to_db;
 
     req_table* new_req = create_req_by_resp(value, value_size);
-    cache_data* data;
 
-
-    new_req->table = get_table_name(key);
-    key_column = get_column(key);
     data = init_cache_data(key, key_size, new_req);
 
     req_to_db = create_pg_set(new_req->table, key_column, data);

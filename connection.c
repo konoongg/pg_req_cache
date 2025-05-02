@@ -48,7 +48,6 @@ void delete(connection* conn, conn_list* list) {
     }
 }
 
-
 /*
 * Adds an element to the list of active events.
 * Locking is required because the database worker thread may also interact with this list.

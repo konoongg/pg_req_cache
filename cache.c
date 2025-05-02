@@ -16,25 +16,114 @@
 
 #include "alloc.h"
 #include "cache.h"
-#include "hash.h"
 #include "config.h"
+#include "hash.h"
+#include "ht_table_type.h"
+#include "ht_value_type.h"
+#include "ht.h"
 #include "storage_data.h"
 
-
+value* create_copy_value(value* v);
+void free_values(value* v);
 
 cache* c;
 extern config_redis config;
 
 void init_cache(void) {
-    int err;
-    int table_cb =  config.c_conf.count_basket_tables;
-    size_t max_table_size = config.c_conf.max_storage_size;
+    int value_cb =  config.c_conf.count_basket_values;
     int ttl_s = config.c_conf.ttl_s;
 
     c = wcalloc(sizeof(cache));
 
-    c->tables = create_ht(table_cb, max_table_size, ttl_s, murmur_hash_2);
+    create_ht_info ht_table_info;
+    ht_table_info.cmp_key = cmp_table_key;
+    ht_table_info.copy = copy_table;
+    ht_table_info.count_basket =  config.c_conf.count_basket_tables;
+    ht_table_info.free_data = free_data_table;
+    ht_table_info.hash_func = murmur_hash_3;
+    ht_table_info.max_ht_size = config.c_conf.max_storage_size;
+    ht_table_info.ttl_s = 0;
+    ht_table_info.value_free = value_free_table;
+    c->tables = create_ht(&ht_table_info);
+
+    create_ht_info ht_value_info;
+    ht_value_info.cmp_key = cmp_table_key;
+    ht_value_info.copy = copy_value;
+
+    c->values = create_ht(value_cb, max_table_size, ttl_s, murmur_hash_3);
 }
+
+//Based on the pre-formed data information, we create data for the cache and add metadata.
+value* create_value(char* key, int key_size, req_table* args) {
+    cache_data* data = wcalloc(sizeof(cache_data));
+    data->cache_data_size = sizeof(cache_data);
+
+    data->key = wcalloc(key_size * sizeof(char));
+    data->cache_data_size += key_size * sizeof(char);
+    data->key_size = key_size;
+    memcpy(data->key, key, key_size);
+
+    data->v = wcalloc(sizeof(value));
+    data->cache_data_size += sizeof(value);
+    data->v->count_fields = args->count_fields;
+    data->v->count_tuples = args->count_tuples;
+    data->v->values = wcalloc(args->count_tuples * sizeof(attr*));
+    data->cache_data_size += args->count_tuples * sizeof(attr*);
+    for (int i = 0; i < args->count_tuples; ++i) {
+        data->v->values[i] = wcalloc(args->count_fields * sizeof(attr));
+        data->cache_data_size += args->count_fields * sizeof(attr);
+        for (int j = 0; j < args->count_fields; ++j ) {
+            int column_name_size;
+            column* c = get_column_info(args->table, args->columns[i][j].column_name);
+            attr* a;
+
+            if (c == NULL) {
+                ereport(INFO, errmsg("init_cache_data: can't get column %s in table %s ", args->columns[i][j].column_name, args->table));
+                abort();
+            }
+            column_name_size = strlen(c->column_name) + 1;
+            a = &(data->v->values[i][j]);
+            a->type = c->type;
+            a->column_name = wcalloc(column_name_size * sizeof(char));
+            data->cache_data_size += column_name_size * sizeof(char);
+            memcpy(a->column_name, args->columns[i][j].column_name, column_name_size);
+            a->is_nullable = c->is_nullable;
+
+
+            a->data = wcalloc(sizeof(db_data));
+            data->cache_data_size += sizeof(db_data);
+            switch (a->type) {
+                case INT:
+                    a->data->num = (int)strtol(args->columns[i][j].data, NULL, 10);
+                    break;
+                case STRING:
+                    a->data->str.size = args->columns[i][j].data_size;
+                    a->data->str.str = wcalloc(a->data->str.size * sizeof(char));
+                    data->cache_data_size += a->data->str.size * sizeof(char);
+                    memcpy(a->data->str.str, args->columns[i][j].data, a->data->str.size );
+                    break;
+            }
+        }
+    }
+    return data;
+}
+
+void free_values(value* v) {
+    int count_tuples = v->count_tuples;
+    int count_field = v->count_fields;
+
+     for (int i = 0; i < count_tuples; ++i) {
+        for (int j = 0; j < count_field; ++j) {
+            free(v->values[i][j].column_name);
+            free(v->values[i][j].data);
+        }
+        free(v->values[i]);
+    }
+
+    free(v->values);
+    free(v);
+}
+
 
 /*
 * A function to retrieve data from the cache.
@@ -55,51 +144,54 @@ value* get_cache(key_info* key_i) {
 * First, it checks whether such data already exists.
 * If it does, the data is updated; if not, new data is added.
 */
-void set_cache(key_info* key_i) {
-    hash_table* values = get_data(c->tables, key_i->table_column, key_i->table_column_size);
+void set_cache(key_info* key_i, value* v, int value_size) {
+    find_table f_table;
+    f_table.key = key_i->table_column;
+    f_table.key_size = key_i->table_column_size;
 
-    if () {
-        
+    find_ht_data f_data;
+    f_data.hash_key = key_i->table_column;
+    f_data.hash_key_size = key_i->table_column_size;
+    f_data.find_key = &f_table;
+
+    table_value* values = get_data(c->tables, &find_ht_data);
+    create_ht_data new_data;
+
+    if (values == NULL) {
+        create_ht_data new_table_data;
+        new_table_data.cmp_key = cmp_table_key;
+        new_table_data.copy = NULL;
+
+        find_table* f_table = wcalloc(sizeof(find_table));
+        f_table->key_size = key_i->table_column_size;
+        f_table->key = wcalloc(f_table->key_size * sizeof(char));
+        memcpy(f_table->key, key_i->table_column, f_table->key_size);
+        new_table_data.find_key = f_table;
+
+        new_table_data.hash_key = wcalloc(f_table->key_size * sizeof(char)); 
+
+
+        new_table.copy = NULL;
+        new_table.value_free = destroy_ht;
+        new_table.key = wcalloc(key_i->table_column_size * sizeof(char));
+        memcpy(new_table.key, key_i->table_column, key_i->table_column_size);
+
+        new_table.key_size = key_i->table_column_size;
+        new_table.value = new_ht;
+        new_table.value_size = sizeof(hash_table*);
+
+        set_data_if_not_exist(c->tables, &new_table);
+        values = get_data(c->tables, key_i->table_column, max_table_size);
     }
 
+    new_data.key = wcalloc(key_i->value_size * sizeof(char));
+    memcpy(new_data.key, key_i->value, key_i->value_size);
+    new_data.key_size = key_i->value_size;
+    new_data.value = v;
+    new_data.value_size = value_size;
+    new_data.copy = create_copy_value;
 
-    cache_basket* basket;
-    cache_data* data;
-
-    basket = get_basket(new_data->key, new_data->key_size);
-
-    basket_lock(basket, false);
-
-    data = find_data_in_basket(basket, new_data->key, new_data->key_size);
-    if (data == NULL) {
-        if (basket->first == NULL) {
-            data = basket->first = basket->last = wcalloc(sizeof(cache_data));
-        } else {
-            basket->last->next = wcalloc(sizeof(cache_data));
-            data = basket->last = basket->last->next;
-        }
-        data->next = NULL;
-        data->key_size = new_data->key_size;
-        data->key = new_data->key;
-        data->v = new_data->v;
-    } else {
-        atomic_fetch_sub(&(ht->cur_ht_size, value_to_subtract);
-        sub_cache_size(data->cache_data_size);
-        free_values(data->v);
-        data->v = new_data->v;
-    }
-
-    if (add_cache_size(data->cache_data_size) == NEED_GC) {
-        wake_up_cache_gc();
-    }
-
-    data->last_time = time(NULL);
-    if (data->last_time == -1) {
-        char* err = strerror(errno);
-        ereport(INFO, errmsg("set_cache: time error  %s", err));
-        abort();
-    }
-    basket_unlock(basket);
+    set_data(values, &new_data);
 }
 
 int delete_cache(key_info* key_i) {
