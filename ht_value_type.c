@@ -51,3 +51,28 @@ void* copy_value(void* data) {
     }
     return new_v;
 }
+
+void free_data_value(void (*value_free)(void* v), ht_data* data) {
+    find_value_key* find_key = data->find_key;
+    free(find_key->key);
+    value_free(data->value);
+    free(data->find_key);
+    free(data);
+}
+
+void value_free_value(void* data) {
+    value* v = (value*)data;
+    int count_tuples = v->count_tuples;
+    int count_field = v->count_fields;
+
+     for (int i = 0; i < count_tuples; ++i) {
+        for (int j = 0; j < count_field; ++j) {
+            free(v->values[i][j].column_name);
+            free(v->values[i][j].data);
+        }
+        free(v->values[i]);
+    }
+
+    free(v->values);
+    free(v);
+}

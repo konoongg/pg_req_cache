@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,10 +31,9 @@ cache* c;
 extern config_redis config;
 
 void init_cache(void) {
-    int value_cb =  config.c_conf.count_basket_values;
-    int ttl_s = config.c_conf.ttl_s;
-
     c = wcalloc(sizeof(cache));
+
+    atomic_store(&c->table_max_num, 0);
 
     create_ht_info ht_table_info;
     ht_table_info.cmp_key = cmp_table_key;
@@ -49,8 +49,13 @@ void init_cache(void) {
     create_ht_info ht_value_info;
     ht_value_info.cmp_key = cmp_table_key;
     ht_value_info.copy = copy_value;
-
-    c->values = create_ht(value_cb, max_table_size, ttl_s, murmur_hash_3);
+    ht_value_info.count_basket = config.c_conf.count_basket_values;
+    ht_value_info.free_data = free_data_value;
+    ht_value_info.hash_func = murmur_hash_3;
+    ht_value_info.max_ht_size = config.c_conf.max_storage_size;
+    ht_value_info.ttl_s = config.c_conf.ttl_s;
+    ht_value_info.value_free = value_free_value;
+    c->values = create_ht(&ht_value_info);
 }
 
 //Based on the pre-formed data information, we create data for the cache and add metadata.
@@ -108,22 +113,6 @@ value* create_value(char* key, int key_size, req_table* args) {
     return data;
 }
 
-void free_values(value* v) {
-    int count_tuples = v->count_tuples;
-    int count_field = v->count_fields;
-
-     for (int i = 0; i < count_tuples; ++i) {
-        for (int j = 0; j < count_field; ++j) {
-            free(v->values[i][j].column_name);
-            free(v->values[i][j].data);
-        }
-        free(v->values[i]);
-    }
-
-    free(v->values);
-    free(v);
-}
-
 
 /*
 * A function to retrieve data from the cache.
@@ -144,8 +133,9 @@ value* get_cache(key_info* key_i) {
 * First, it checks whether such data already exists.
 * If it does, the data is updated; if not, new data is added.
 */
+// надо добавить очситку  hash key
 void set_cache(key_info* key_i, value* v, int value_size) {
-    find_table f_table;
+    find_table_key f_table;
     f_table.key = key_i->table_column;
     f_table.key_size = key_i->table_column_size;
 
@@ -154,44 +144,48 @@ void set_cache(key_info* key_i, value* v, int value_size) {
     f_data.hash_key_size = key_i->table_column_size;
     f_data.find_key = &f_table;
 
-    table_value* values = get_data(c->tables, &find_ht_data);
+    table_data* t_values = get_data(c->tables, &find_ht_data);
     create_ht_data new_data;
 
-    if (values == NULL) {
+    if (t_values == NULL) {
         create_ht_data new_table_data;
-        new_table_data.cmp_key = cmp_table_key;
-        new_table_data.copy = NULL;
 
-        find_table* f_table = wcalloc(sizeof(find_table));
+        find_table_key* f_table = wcalloc(sizeof(find_table_key));
         f_table->key_size = key_i->table_column_size;
         f_table->key = wcalloc(f_table->key_size * sizeof(char));
         memcpy(f_table->key, key_i->table_column, f_table->key_size);
+
         new_table_data.find_key = f_table;
+        new_table_data.find_key_size = sizeof(find_table_key) + f_table->key_size;
+        new_table_data.hash_key_size = key_i->table_column_size;
+        new_table_data.hash_key = wcalloc(new_table_data.hash_key_size * sizeof(char));
+        memcpy(new_table_data.hash_key, key_i->table_column, new_table_data.hash_key_size);
 
-        new_table_data.hash_key = wcalloc(f_table->key_size * sizeof(char)); 
+        table_data* td = wcalloc(sizeof(table_data));
+        td->uniq_num = atomic_fetch_add(&(c->table_max_num), 1);
+        new_table_data.value = td;
+        new_table_data.value_size = sizeof(table_data);
 
-
-        new_table.copy = NULL;
-        new_table.value_free = destroy_ht;
-        new_table.key = wcalloc(key_i->table_column_size * sizeof(char));
-        memcpy(new_table.key, key_i->table_column, key_i->table_column_size);
-
-        new_table.key_size = key_i->table_column_size;
-        new_table.value = new_ht;
-        new_table.value_size = sizeof(hash_table*);
-
-        set_data_if_not_exist(c->tables, &new_table);
-        values = get_data(c->tables, key_i->table_column, max_table_size);
+        set_data_if_not_exist(c->tables, &new_table_data);
+        t_values = get_data(c->tables, &find_ht_data);
     }
+    create_ht_data new_value_data;
 
-    new_data.key = wcalloc(key_i->value_size * sizeof(char));
-    memcpy(new_data.key, key_i->value, key_i->value_size);
-    new_data.key_size = key_i->value_size;
-    new_data.value = v;
-    new_data.value_size = value_size;
-    new_data.copy = create_copy_value;
+    find_value_key* f_value = wcalloc(sizeof(find_value_key));
+    f_value->table_num = t_values->uniq_num;
+    f_value->key_size = key_i->value_size;
+    f_value->key = wcalloc(f_value->key_size * sizeof(char));
+    memcpy(f_value->key, key_i->valuel, f_value->key_size);
+    new_value_data.find_key = f_value;
+    new_value_data.find_key_size = sizeof(find_value_key) + f_value->key_size;
 
-    set_data(values, &new_data);
+    new_value_data.hash_key_size = key_i->full_size.
+    new_value_data.hash_key = wcalloc(new_value_data.hash_key_size  * sizeof(char));
+    memcpy(new_value_data.hash_key, key_i->full_key, new_value_data.hash_key_size);
+
+    new_value_data.value = v;
+    new_value_data.value_size = value_size;
+    set_data(c->values, &new_data);
 }
 
 int delete_cache(key_info* key_i) {

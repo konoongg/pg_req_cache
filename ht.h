@@ -14,7 +14,7 @@ typedef struct ht_data ht_data;
 
 hash_table* create_ht(create_ht_info* info);
 int delete_data(hash_table* ht, char* key, int key_size);
-void set_data_if_not_exist(hash_table* ht, ht_data* new_data);
+void set_data_if_not_exist(hash_table* ht, create_ht_data* new_data);
 void set_data(hash_table* ht, ht_data* new_data);
 void* get_data(hash_table* ht, find_ht_data* find);
 void destroy_ht(hash_table* ht);

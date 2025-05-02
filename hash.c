@@ -62,8 +62,9 @@ static inline uint32_t murmur_32_scramble(uint32_t k) {
 }
 
 uint64_t murmur_hash_3(void* key, int len, void* argv) {
-    const uint8_t* key_ptr = (const uint8_t*)key;
+    int* count_basket = (int*)argv;
 
+    const uint8_t* key_ptr = (const uint8_t*)key;
     uint32_t h = 0x9747b28c;
     uint32_t k;
     for (size_t i = len >> 2; i; i--) {
@@ -88,7 +89,7 @@ uint64_t murmur_hash_3(void* key, int len, void* argv) {
     h ^= h >> 13;
     h *= 0xc2b2ae35;
     h ^= h >> 16;
-    h %=  config.c_conf.count_basket;
+    h %=  *count_basket;
     return h;
 }
 

@@ -16,9 +16,7 @@ struct find_table_key {
 };
 
 struct table_data {
-    char* name;
     int uniq_num;
-    int name_size;
 };
 
 #endif

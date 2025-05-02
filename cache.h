@@ -14,7 +14,6 @@
 
 typedef struct cache cache;
 typedef struct key_info key_info;
-typedef struct table_value table_value;
 
 int delete_cache(char* key, int key_size);
 size_t get_cur_cache_size(void);
@@ -25,6 +24,7 @@ void init_cache(void);
 void set_cache(cache_data* new_data);
 
 struct cache {
+    _Atomic int table_max_num;
     hash_table* tables;
     hash_table* values;
 };
@@ -36,6 +36,7 @@ struct key_info {
     char* value;
     int table_column_size;
     int value_size;
+    int full_size;
 };
 
 #endif
