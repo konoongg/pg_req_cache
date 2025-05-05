@@ -7,18 +7,17 @@
 #include "libpq-fe.h"
 
 #include "cache.h"
-#include "connection.h"
 #include "storage_data.h"
+#include "connection.h"
 
 typedef enum db_oper_res db_oper_res;
 typedef struct backend backend;
-typedef struct column column;
 typedef struct db_meta_data db_meta_data;
 typedef struct table table;
 
 void init_db(backend* back);
 column* get_column_info(char* table_name, char* column_name);
-db_oper_res read_from_db(PGconn* conn, char* t, req_table** req);
+db_oper_res read_from_db(PGconn* conn, char* t, created_cache_respons** req);
 db_oper_res write_to_db (PGconn* conn, char* req);
 void finish_connects(backend* backends);
 
@@ -36,11 +35,7 @@ struct backend {
     connection* conn;
 };
 
-struct column {
-    db_type type;
-    bool is_nullable;
-    char* column_name;
-};
+
 
 struct table {
     int count_column;

@@ -1,40 +1,38 @@
-#ifndef STORAGE_DATA_H
-#define STORAGE_DATA_H
+#ifndef STORAGE_H
+#define STORAGE_H
 
-#include <stdbool.h>
+typedef enum db_type db_type;
+typedef struct cache_attr cache_attr;
+typedef struct cache_response cache_response;
+typedef struct column column;
+typedef struct created_cache_respons created_cache_respons;
+typedef union db_data db_data;
 
-#include "libpq-fe.h"
-
-
-typedef struct req_column req_column;
-typedef struct req_table req_table;
-
-
-req_table* create_req_by_pg(PGresult* res, char* table);
-req_table* create_req_by_resp(char* value, int value_size);
-value* create_copy_data(value* v);
-void free_req(req_table* req);
-void free_values(value* v);
-
-
-
-struct req_column {
-    char* column_name;
-    int data_size;
-    char* data;
+struct cache_attr {
+    db_data* data;
 };
 
-/*
-* An intermediate data structure that is formed based
-* on data received from the database or the user.
-* Metadata about the columns is then added to it,
-* and the data for the cache is generated.
-*/
-struct req_table {
-    char* table;
+struct cache_response {
+    cache_attr** values;
+    column** columns;
     int count_fields;
     int count_tuples;
-    req_column** columns;
+};
+
+struct created_cache_respons {
+    cache_response* res;
+    int size;
+};
+
+struct column {
+    db_type type;
+    bool is_nullable;
+    char* column_name;
+};
+
+enum db_type {
+    INT,
+    STRING,
 };
 
 #endif

@@ -6,6 +6,7 @@
 #include "libpq-fe.h"
 
 #include "alloc.h"
+#include "cache.h"
 #include "config.h"
 #include "connection.h"
 #include "db.h"
@@ -53,29 +54,29 @@ db_oper_res write_to_db(PGconn* conn, char* req) {
 * The PQgetResult(conn) function must be called until NULL is returned.
 * In the current implementation, it is expected that all data is read at once.
 */
-db_oper_res read_from_db(PGconn* conn, char* t, req_table** req) {
+db_oper_res read_from_db(PGconn* conn, char* t, created_cache_respons** res) {
     if (PQconnectPoll(conn) == PGRES_POLLING_WRITING) {
         return WAIT_OPER_RES;
     } else if (PQconnectPoll(conn) == PGRES_POLLING_FAILED) {
         return ERR_OPER_RES;
     } else if (PQconnectPoll(conn) == PGRES_POLLING_OK) {
-        PGresult* res = PQgetResult(conn);
-        *req = create_req_by_pg(res, t);
+        PGresult* result = PQgetResult(conn);
+        *res = create_req_by_pg(result, t);
 
-        PQclear(res);
+        PQclear(result);
 
-        if (*req == NULL) {
+        if (*res == NULL) {
             return ERR_OPER_RES;
         }
 
-        while (res != NULL) {
-            if (PQresultStatus(res) == PGRES_FATAL_ERROR) {
-                const char* errorMessage = PQresultErrorMessage(res);
+        while (result != NULL) {
+            if (PQresultStatus(result) == PGRES_FATAL_ERROR) {
+                const char* errorMessage = PQresultErrorMessage(result);
                 ereport(INFO, errmsg("read_from_db: bd response error  -  %s", errorMessage));
                 abort();
             }
-            res = PQgetResult(conn);
-            PQclear(res);
+            result = PQgetResult(conn);
+            PQclear(result);
         }
 
         return READ_OPER_RES;

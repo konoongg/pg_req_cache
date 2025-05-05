@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <time.h>
 
+#include "cache_serializer.h"
 #include "config.h"
 #include "ht_value_type.h"
 #include "ht.h"
@@ -13,15 +14,12 @@
 
 
 typedef struct cache cache;
-typedef struct key_info key_info;
 
-int delete_cache(char* key, int key_size);
-size_t get_cur_cache_size(void);
-value* get_cache(key_info* key_i);
-void cache_timer_delete(time_t check_time);
+cache_response* get_cache(key_info* key_i);
+int delete_cache(key_info* key_i);
 void free_cache(void);
 void init_cache(void);
-void set_cache(cache_data* new_data);
+void set_cache(key_info* key_i, cache_response* v, int value_size);
 
 struct cache {
     _Atomic int table_max_num;
@@ -29,14 +27,5 @@ struct cache {
     hash_table* values;
 };
 
-struct key_info {
-    char* full_key;
-
-    char* table_column;
-    char* value;
-    int table_column_size;
-    int value_size;
-    int full_size;
-};
 
 #endif

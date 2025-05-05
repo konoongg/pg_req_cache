@@ -4,13 +4,11 @@
 bool cmp_table_key(void* find_key_1, void* find_key_2) {
     find_value_key* key_1 = find_key_1;
     find_value_key* key_2 = find_key_2;
-
     if (memcmp(key_1->key, key_2->key, key_1->key_size) == 0 &&
             key_1->key_size == key_2->key_size &&
             key_1->table_num == key_2->table_num) {
         return true;
     }
-
     return false;
 }
 

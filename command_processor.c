@@ -6,6 +6,7 @@
 #include "utils/elog.h"
 
 #include "alloc.h"
+#include "cache_serializer.h"
 #include "cache.h"
 #include "command_processor.h"
 #include "connection.h"
@@ -36,49 +37,6 @@ redis_command commands[] = {
     {"ping", do_ping},
     {"config", do_config}
 };
-
-
-key_info* create_key_info(char* key) {
-    key_info* key_i = wcalloc(sizeof(key_info));
-    char* dot_position_s;
-    char* dot_position_f;
-
-
-    dot_position_f = strchr(key, '.');
-    if (dot_position_f == NULL) {
-        return NULL;
-    }
-
-    dot_position_s = strchr(dot_position_f + 1, '.');
-    if (dot_position_s == NULL) {
-        return NULL;
-    }
-
-    key_i->table_length = dot_position_s - key;
-    key_i->table = wcalloc((key_i->table_length + 1) * sizeof(char));
-    memcpy(key_i->table, key, key_i->table_length);
-    key_i->table[key_i->table_length] = '\0';
-
-    key_i->column_length = dot_position_s - dot_position_f - 1;
-    key_i->column = wcalloc((key_i->column_length + 1) * sizeof(char));
-    memcpy(key_i->column, dot_position_f + 1, key_i->column_size);
-    key_i->column[key_i->column_length] = '\0';
-
-    key_i->value_length = strlen(key) - dot_position_s - 1;
-    key_i->value = wcalloc((key_i->value_length + 1) * sizeof(char));
-    memcpy(key_i->value, dot_position_s + 1, key_i->value_length);
-    key_i->value[key_i->value_length] = '\0';
-
-    return key_i;
-}
-
-void destroy_key_info(key_info* key_i) {
-    free(key_i->column);
-    free(key_i->table);
-    free(key_i->value);
-    free(key_i);
-}
-
 
 //In the case of receiving a PING command, send PONG back to the user.
 process_result do_ping(client_req* req, answer* answ, connection* conn) {
@@ -116,14 +74,12 @@ process_result do_get(client_req* cl_req, answer* answ, connection* conn) {
     char* key = cl_req->argv[1];
     int key_size = cl_req->argv_size[1];
     key_info* key_i = create_key_info(key);
-    value* v = get_cache(key_i);
+    cache_response* res = get_cache(key_i);
 
-    if (v == NULL) {
-        char* table_name = get_table_name(key);
-        char* req_to_db = create_pg_get(key, key_size);
+    if (res == NULL) {
+        char* req_to_db = create_pg_get(key_i);
         move_from_active_to_wait(conn);
-        register_command(table_name, req_to_db, conn, CACHE_UPDATE, key, key_size);
-        destroy_key_info(key_i);
+        register_command(key_i, req_to_db, conn, CACHE_UPDATE);
         return DB_REQ;
     }
 
@@ -146,27 +102,21 @@ process_result do_set(client_req* cl_req, answer* answ, connection* conn) {
     char* value = cl_req->argv[2];
     int key_size = cl_req->argv_size[1];
     int value_size = cl_req->argv_size[2];
-    char* key_column;
-    char* req_to_db;
+    created_cache_respons* res;
 
-    req_table* new_req = create_req_by_resp(value, value_size);
 
-    data = init_cache_data(key, key_size, new_req);
+    key_info* key_i = create_key_info(key, key_size);
+    res = create_response_by_resp(key_i->table, value, value_size);
 
-    req_to_db = create_pg_set(new_req->table, key_column, data);
-    set_cache(data);
+    set_cache(key_i, res->res, res->size);
 
     answ->answer_size = def_resp.ok.answer_size;
     answ->answer = wcalloc(answ->answer_size  * sizeof(char));
 
     memcpy(answ->answer, def_resp.ok.answer, answ->answer_size);
-
     move_from_active_to_wait(conn);
-
-    register_command(new_req->table, req_to_db, conn, CACHE_SYNC, key, key_size);
-
-    free_req(new_req);
-    free_cache_data(data);
+    char* req_to_db = create_pg_set(key_i, res->res);
+    register_command(key_i, req_to_db, conn, CACHE_SYNC);
     return DB_APPROVE;
 }
 
@@ -176,26 +126,23 @@ process_result do_set(client_req* cl_req, answer* answ, connection* conn) {
 * and then an event is registered to delete the data from the database.
 */
 process_result do_del(client_req* cl_req, answer* answ, connection* conn) {
-    char** del_keys = cl_req->argv + 1;
     char* key = cl_req->argv[1];
     char* req_to_db;
-    char* table_name;
     int count_del_keys = cl_req->argc - 1;
+    key_info* del_keys = wcalloc(count_del_keys * sizeof(char*));
     int count_del = 0;
     int key_size = cl_req->argv_size[1];
-    int* size_del_keys = cl_req->argv_size + 1;
+    key_info* key_i;
 
     for (int i = 1; i < cl_req->argc; ++i) {
-        char* del_key = cl_req->argv[i];
-        int del_key_size = cl_req->argv_size[i];
-        count_del += delete_cache(del_key, del_key_size);
+        del_keys[i] = create_key_info(cl_req->argv[i], cl_req->argv_size[i]);
+        count_del += delete_cache(del_keys[i]);
     }
 
     move_from_active_to_wait(conn);
 
-    table_name = get_table_name(key);
-    req_to_db = create_pg_del(count_del_keys, del_keys, size_del_keys);
-    register_command(table_name, req_to_db, conn, CACHE_SYNC, key, key_size);
+    req_to_db = create_pg_del(count_del_keys, del_keys);
+    register_command(key_i->table, req_to_db, conn, CACHE_SYNC, key, key_size);
 
     create_num_resp(answ, count_del);
     return DB_APPROVE;

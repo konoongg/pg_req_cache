@@ -5,7 +5,7 @@ MODULE_big = pg_redis_proxy
 OBJS = \
 	$(WIN32RES) \
 	alloc.o \
-	cache_gc.o \
+	cache_serializer.o \
 	cache.o \
 	command_processor.o \
 	config.o \
@@ -14,13 +14,15 @@ OBJS = \
 	db.o \
 	event.o \
 	hash.o \
+	ht_table_type.o \
+	ht_value_type.o \
+	ht.o \
 	io.o \
 	pg_req_creater.o \
 	query_cache_controller.o \
 	redis_proxy.o \
 	resp_creater.o \
 	socket_wrapper.o \
-	storage_data.o \
 	worker.o
 
 

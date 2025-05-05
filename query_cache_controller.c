@@ -10,6 +10,7 @@
 
 #include "alloc.h"
 #include "connection.h"
+#include "cache_serializer.h"
 #include "db.h"
 #include "hash.h"
 #include "query_cache_controller.h"
@@ -27,7 +28,7 @@ void free_db_command(command_to_db* cmd);
 void* start_db_worker(void*);
 
 void free_db_command(command_to_db* cmd) {
-    free(cmd->key);
+    destroy_key_info(cmd->key);
     free(cmd->table);
     free(cmd->cmd);
     free(cmd);
@@ -55,18 +56,16 @@ void dbw_unlock(void) {
 * The event is added to the processing queue,
 * and the database worker's loop is notified via eventfd that new events have arrived.
 */
-void register_command(char* tabl, char* req, connection* conn, com_reason reason, char* key, int key_size) {
+void register_command(key_info* key_i, char* req, connection* conn, com_reason reason) {
     command_to_db* cmd = wcalloc(sizeof(command_to_db));
 
     cmd->next = NULL;
     cmd->conn = conn;
-    cmd->table = tabl;
+    cmd->table = key_i->table;
     cmd->reason = reason;
     cmd->cmd = req;
 
-    cmd->key = wcalloc(key_size * sizeof(char));
-    memcpy(cmd->key, key, key_size);
-    cmd->key_size = key_size;
+    cmd->key = key_i;
 
     dbw_lock();
 
@@ -144,8 +143,8 @@ proc_status process_write_db(connection* conn) {
 proc_status process_read_db(connection* conn) {
     backend* back = (backend*)conn->data;
     command_to_db* cmd = conn->w_data->data;
-    req_table* req;
-    db_oper_res res = read_from_db(back->conn_with_db, cmd->table, &req);
+    created_cache_respons* res;
+    db_oper_res res = read_from_db(back->conn_with_db, cmd->table, &res);
     if (res == READ_OPER_RES) {
         move_from_wait_to_active(cmd->conn);
 
@@ -153,13 +152,8 @@ proc_status process_read_db(connection* conn) {
         event_notify(cmd->conn->wthrd->not);
 
         if (cmd->reason == CACHE_UPDATE) {
-            char* key = cmd->key;
-            int key_size = cmd->key_size;
-            cache_data* data = init_cache_data(key, key_size, req);
-            set_cache(data);
-            free_cache_data(data);
+            set_cache(cmd->key, res->res, res->size );
         }
-
         free_db_command(cmd);
         stop_event(dbw.wthrd->l, conn->r_data->handle);
 
@@ -227,65 +221,6 @@ proc_status notify_db(connection* conn) {
 
     move_from_active_to_wait(conn);
     return WAIT_PROC;
-}
-
-//Based on the pre-formed data information, we create data for the cache and add metadata.
-cache_data* init_cache_data(char* key, int key_size, req_table* args) {
-    cache_data* data = wcalloc(sizeof(cache_data));
-    data->cache_data_size = sizeof(cache_data);
-
-    data->key = wcalloc(key_size * sizeof(char));
-    data->cache_data_size += key_size * sizeof(char);
-    data->key_size = key_size;
-    memcpy(data->key, key, key_size);
-
-    data->v = wcalloc(sizeof(value));
-    data->cache_data_size += sizeof(value);
-    data->v->count_fields = args->count_fields;
-    data->v->count_tuples = args->count_tuples;
-    data->v->values = wcalloc(args->count_tuples * sizeof(attr*));
-    data->cache_data_size += args->count_tuples * sizeof(attr*);
-    for (int i = 0; i < args->count_tuples; ++i) {
-        data->v->values[i] = wcalloc(args->count_fields * sizeof(attr));
-        data->cache_data_size += args->count_fields * sizeof(attr);
-        for (int j = 0; j < args->count_fields; ++j ) {
-            int column_name_size;
-            column* c = get_column_info(args->table, args->columns[i][j].column_name);
-            attr* a;
-
-            if (c == NULL) {
-                ereport(INFO, errmsg("init_cache_data: can't get column %s in table %s ", args->columns[i][j].column_name, args->table));
-                abort();
-            }
-            column_name_size = strlen(c->column_name) + 1;
-            a = &(data->v->values[i][j]);
-            a->type = c->type;
-            a->column_name = wcalloc(column_name_size * sizeof(char));
-            data->cache_data_size += column_name_size * sizeof(char);
-            memcpy(a->column_name, args->columns[i][j].column_name, column_name_size);
-            a->is_nullable = c->is_nullable;
-
-
-            a->data = wcalloc(sizeof(db_data));
-            data->cache_data_size += sizeof(db_data);
-            switch (a->type) {
-                case INT:
-                    a->data->num = (int)strtol(args->columns[i][j].data, NULL, 10);
-                    break;
-                case STRING:
-                    a->data->str.size = args->columns[i][j].data_size;
-                    a->data->str.str = wcalloc(a->data->str.size * sizeof(char));
-                    data->cache_data_size += a->data->str.size * sizeof(char);
-                    memcpy(a->data->str.str, args->columns[i][j].data, a->data->str.size );
-                    break;
-            }
-        }
-    }
-    return data;
-}
-
-void free_cache_data(cache_data* data) {
-    free(data);
 }
 
 void* start_db_worker(void*) {

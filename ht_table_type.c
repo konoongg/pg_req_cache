@@ -8,7 +8,6 @@ bool cmp_table_key(void* find_key_1, void* find_key_2) {
     if (memcmp(key_1->key, key_2->key, key_1->key_size) == 0 && key_1->key_size == key_2->key_size) {
         return true;
     }
-
     return false;
 }
 
@@ -19,7 +18,6 @@ void* copy_table(void* value) {
     new_data->name = wcalloc(new_data->name_size * sizeof(char));
     memcpy(new_data->name,  data->name, new_data->name_size);
     new_data->uniq_num = data->uniq_num;
-
     return new_data;
 }
 
