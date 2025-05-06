@@ -79,7 +79,7 @@ process_result do_get(client_req* cl_req, answer* answ, connection* conn) {
     if (res == NULL) {
         char* req_to_db = create_pg_get(key_i);
         move_from_active_to_wait(conn);
-        register_command(key_i, req_to_db, conn, CACHE_UPDATE);
+        register_command(key_i, key_i->table, key_i->table_size, req_to_db, conn, CACHE_UPDATE);
         return DB_REQ;
     }
 
@@ -116,7 +116,7 @@ process_result do_set(client_req* cl_req, answer* answ, connection* conn) {
     memcpy(answ->answer, def_resp.ok.answer, answ->answer_size);
     move_from_active_to_wait(conn);
     req_to_db = create_pg_set(key_i, res->res);
-    register_command(NULL, req_to_db, conn, CACHE_SYNC);
+    register_command(NULL, key_i->table, key_i->table_size, req_to_db, conn, CACHE_SYNC);
     destroy_key_info(key_i);
     return DB_APPROVE;
 }
@@ -133,14 +133,14 @@ process_result do_del(client_req* cl_req, answer* answ, connection* conn) {
     int count_del = 0;
 
     for (int i = 1; i < cl_req->argc; ++i) {
-        del_keys[i] = create_key_info(cl_req->argv[i], cl_req->argv_size[i]);
-        count_del += delete_cache(del_keys[i]);
+        del_keys[i - 1] = create_key_info(cl_req->argv[i], cl_req->argv_size[i]);
+        count_del += delete_cache(del_keys[i - 1]);
     }
 
     move_from_active_to_wait(conn);
 
     req_to_db = create_pg_del(count_del_keys, del_keys);
-    register_command(NULL, req_to_db, conn, CACHE_SYNC);
+    register_command(NULL, del_keys[0]->table, del_keys[0]->table_size, req_to_db, conn, CACHE_SYNC);
 
     for (int i = 0; i < count_del_keys; ++i) {
         destroy_key_info(del_keys[i]);

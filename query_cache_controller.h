@@ -12,7 +12,7 @@ typedef struct command_to_db command_to_db;
 typedef struct db_worker db_worker;
 typedef struct list_command list_command;
 
-void register_command(key_info* key_i, char* req, connection* conn, com_reason reason);
+void register_command(key_info* key_i, char* table, int table_size, char* req, connection* conn, com_reason reason);
 void init_db_worker(void);
 
 enum com_reason {

@@ -56,16 +56,17 @@ void dbw_unlock(void) {
 * The event is added to the processing queue,
 * and the database worker's loop is notified via eventfd that new events have arrived.
 */
-void register_command(key_info* key_i, char* req, connection* conn, com_reason reason) {
+void register_command(key_info* key_i, char* table, int table_size, char* req, connection* conn, com_reason reason) {
     command_to_db* cmd = wcalloc(sizeof(command_to_db));
 
     cmd->next = NULL;
     cmd->conn = conn;
-    cmd->table = key_i->table;
+    cmd->key = key_i;
     cmd->reason = reason;
     cmd->cmd = req;
 
-    cmd->key = key_i;
+    cmd->table = wcalloc(table_size * sizeof(char));
+    memcpy(cmd->table, table, table_size);
 
     dbw_lock();
 

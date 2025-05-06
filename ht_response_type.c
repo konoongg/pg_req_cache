@@ -1,6 +1,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "postgres.h"
+#include "utils/elog.h"
+
 #include "alloc.h"
 #include "ht_response_type.h"
 #include "ht.h"

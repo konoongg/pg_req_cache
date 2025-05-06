@@ -66,7 +66,7 @@ void ht_timer_delete(hash_table* ht, time_t check_time) {
 //A function to retrieve the corresponding ht bucket based on a string.
 ht_basket* get_basket(hash_table* ht, char* key, int key_size) {
     u_int64_t hash;
-    hash = ht->hash_func(key, key_size, NULL);
+    hash = ht->hash_func(key, key_size, &(ht->count_baskets));
     return &(ht->baskets[hash]);
 }
 

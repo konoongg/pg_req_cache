@@ -1,5 +1,8 @@
 #include <stdlib.h>
 
+#include "postgres.h"
+#include "utils/elog.h"
+
 #include "libpq-fe.h"
 
 #include "alloc.h"
@@ -67,13 +70,13 @@ created_cache_respons* create_response_by_resp(char* table, char* value, int val
             ccr->size += sizeof(db_data);
             switch (res->columns[cur_count_attr]->type) {
                 case INT:
-                    res->values[0]->data->num = (int)strtol(data, NULL, 10);
+                    res->values[0][cur_count_attr].data->num = (int)strtol(data, NULL, 10);
                     break;
                 case STRING:
-                    res->values[0]->data->str.size = attr_size;
-                    res->values[0]->data->str.str = wcalloc(res->values[0]->data->str.size * sizeof(char));
-                    ccr->size += res->values[0]->data->str.size * sizeof(char);
-                    memcpy(res->values[0]->data->str.str, data, attr_size);
+                    res->values[0][cur_count_attr].data->str.size = attr_size;
+                    res->values[0][cur_count_attr].data->str.str = wcalloc(attr_size * sizeof(char));
+                    ccr->size += res->values[0][cur_count_attr].data->str.size * sizeof(char);
+                    memcpy(res->values[0][cur_count_attr].data->str.str, data, attr_size);
                     break;
             }
             free(data);
@@ -143,13 +146,13 @@ created_cache_respons* create_response_by_pg(PGresult* result, char* table) {
             ccr->size += sizeof(db_data);
             switch (res->columns[column]->type) {
                 case INT:
-                    res->values[0]->data->num = (int)strtol(value, NULL, 10);
+                    res->values[row][column].data->num = (int)strtol(value, NULL, 10);
                     break;
                 case STRING:
-                    res->values[0]->data->str.size = value_size;
-                    res->values[0]->data->str.str = wcalloc(res->values[0]->data->str.size * sizeof(char));
-                    ccr->size += res->values[0]->data->str.size * sizeof(char);
-                    memcpy(res->values[0]->data->str.str, value, value_size);
+                    res->values[row][column].data->str.size = value_size;
+                    res->values[row][column].data->str.str = wcalloc(value_size * sizeof(char));
+                    ccr->size += res->values[row][column].data->str.size * sizeof(char);
+                    memcpy(res->values[row][column].data->str.str, value, value_size);
                     break;
             }
         }
@@ -186,7 +189,7 @@ key_info* create_key_info(char* key, int key_size) {
     memcpy(key_i->table_column, dot_position_f + 1, key_i->table_column_size);
     key_i->table_column[key_i->table_column_size] = '\0';
 
-    key_i->column_size = dot_position_s - dot_position_f;
+    key_i->column_size = dot_position_s - dot_position_f - 1;
     key_i->column = wcalloc((key_i->column_size + 1) * sizeof(char));
     memcpy(key_i->column, dot_position_f + 1, key_i->column_size);
     key_i->column[key_i->column_size] = '\0';
