@@ -8,7 +8,6 @@
 
 #include "cache_serializer.h"
 #include "config.h"
-#include "ht_value_type.h"
 #include "ht.h"
 #include "storage_data.h"
 
@@ -26,6 +25,7 @@ struct cache {
     hash_table* tables;
     hash_table* values;
 };
+
 
 
 #endif

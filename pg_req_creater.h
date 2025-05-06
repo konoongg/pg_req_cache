@@ -12,7 +12,7 @@
 
 typedef enum attr_parser attr_parser;
 
-char* create_pg_del(int count, key_info* key_i);
+char* create_pg_del(int count, key_info** key_i);
 char* create_pg_get(key_info* key_i);
 char* create_pg_set(key_info* key_i, cache_response* data);
 

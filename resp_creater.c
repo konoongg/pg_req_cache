@@ -117,7 +117,7 @@ void create_bulk_string_resp(answer* answ, char* src, int size) {
 * We know that, according to the application logic, we will always return an array of arrays.
 * The nested array can contain various simple data types, such as strings or numbers
 */
-void create_array_resp(answer* answ, value* res) {
+void create_array_resp(answer* answ, cache_response* res) {
     int index = 0;
     char count_tuple_str[MAX_STR_NUM_SIZE];
     char count_field_str[MAX_STR_NUM_SIZE];
@@ -135,8 +135,8 @@ void create_array_resp(answer* answ, value* res) {
         answer* sub_sub_answer = wcalloc(res->count_fields * sizeof(answer));
         sub_answers[i].answer_size = 1 +  strlen(count_field_str) + 2; // *<count_column>\r\n<answ>
         for (int j = 0; j < res->count_fields; ++j) {
-            attr* a = &(res->values[i][j]);
-            switch (a->type) {
+            cache_attr* a = &(res->values[i][j]);
+            switch (res->columns[j]->type) {
                 case INT:
                     create_num_resp(&(sub_sub_answer[j]), a->data->num);
                     break;

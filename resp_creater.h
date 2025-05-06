@@ -21,7 +21,7 @@ typedef struct resp_int_arg resp_int_arg;
 typedef union generic_resp_arg generic_resp_arg;
 typedef struct default_resp_answer default_resp_answer;
 
-void create_array_resp(answer* answ, value* res);
+void create_array_resp(answer* answ, cache_response* res);
 void create_num_resp(answer* answ, int num);
 void init_def_resp (void);
 

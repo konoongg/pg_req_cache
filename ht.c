@@ -1,12 +1,20 @@
+#include <pthread.h>
 #include <stdatomic.h>
 
 #include "postgres.h"
 #include "utils/elog.h"
 
+#include "alloc.h"
 #include "ht.h"
 
 #define write_lock false
 #define read_lock true
+
+ht_basket* get_basket(hash_table* ht, char* key, int key_size);
+ht_data* find_data_in_basket(hash_table* ht, ht_basket* basket, void* find_key);
+void basket_lock(ht_basket* basket, bool is_read_lock);
+void basket_unlock(ht_basket* basket);
+void free_data_from_ht(hash_table* ht, ht_basket* basket, ht_data* cur_data, ht_data* prev_data);
 
 void basket_lock(ht_basket* basket, bool is_read_lock) {
     if (is_read_lock) {
@@ -34,7 +42,7 @@ void basket_unlock(ht_basket* basket) {
 
 void ht_timer_delete(hash_table* ht, time_t check_time) {
     time_t cur_time = time(NULL);
-    for (int i = 0; i < ht->count_basket; ++i) {
+    for (int i = 0; i < ht->count_baskets; ++i) {
         ht_basket* basket = &(ht->baskets[i]);
         ht_data* cur_data;
         ht_data* prev_data;
@@ -45,7 +53,7 @@ void ht_timer_delete(hash_table* ht, time_t check_time) {
         prev_data = NULL;
         while (cur_data != NULL) {
             if (cur_time - cur_data->last_time >= check_time)  {
-                free_data_from_ht(basket, cur_data, prev_data);
+                free_data_from_ht(ht, basket, cur_data, prev_data);
             } else {
                 prev_data = cur_data;
             }
@@ -57,10 +65,7 @@ void ht_timer_delete(hash_table* ht, time_t check_time) {
 
 //A function to retrieve the corresponding ht bucket based on a string.
 ht_basket* get_basket(hash_table* ht, char* key, int key_size) {
-    ht_basket* basket;
     u_int64_t hash;
-
-    basket = ht->baskets;
     hash = ht->hash_func(key, key_size, NULL);
     return &(ht->baskets[hash]);
 }
@@ -69,11 +74,11 @@ ht_basket* get_basket(hash_table* ht, char* key, int key_size) {
 * The function checks whether the specified bucket contains data with the provided key.
 * If the data exists, a reference to it is returned; otherwise, NULL is returned.
 */
-ht_data* find_data_in_basket(ht_basket* basket, void* find_key) {
+ht_data* find_data_in_basket(hash_table* ht, ht_basket* basket, void* find_key) {
     ht_data* data;
     data = basket->first;
     while (data != NULL) {
-        if (data->cmp_key(data->find_key, find_key)) {
+        if (ht->cmp_key(data->find_key, find_key)) {
             return data;
         }
         data = data->next;
@@ -92,15 +97,15 @@ void free_data_from_ht(hash_table* ht, ht_basket* basket, ht_data* cur_data, ht_
         basket->last = prev_data;
     }
 
-    atomic_fetch_sub(&(ht->cur_ht_size, cur_data->ht_data_size));
-    ht->free_data(cur_data);
+    atomic_fetch_sub(&(ht->cur_ht_size), cur_data->ht_data_size);
+    ht->free_data(ht->value_free, cur_data);
 }
 
 hash_table* create_ht(create_ht_info* info) {
     hash_table* ht = wcalloc(sizeof(hash_table));
 
     ht->count_baskets = info->count_basket;
-    ht->baskets = wcalloc(ht->count_baskets * siziof(ht_basket));
+    ht->baskets = wcalloc(ht->count_baskets * sizeof(ht_basket));
     ht->ttl_s = info->ttl_s;
     ht->max_ht_size = info->max_ht_size;
 
@@ -110,9 +115,9 @@ hash_table* create_ht(create_ht_info* info) {
     ht->free_data = info->free_data;
     ht->value_free = info->value_free;
 
-    atomic_store(&ht->cur_cache_size, 0);
+    atomic_store(&(ht->cur_ht_size), 0);
 
-    for (int i = 0; i < ht->baskets ; ++i) {
+    for (int i = 0; i < ht->count_baskets ; ++i) {
         int err;
 
         (ht->baskets[i]).lock = wcalloc(sizeof(pthread_rwlock_t));
@@ -122,6 +127,7 @@ hash_table* create_ht(create_ht_info* info) {
             abort();
         }
     }
+    return ht;
 }
 
 void destroy_ht(hash_table* ht) {
@@ -131,8 +137,8 @@ void destroy_ht(hash_table* ht) {
         ht_data* cur_data = basket->first;
         while (cur_data != NULL) {
             ht_data* new_data = cur_data->next;
-            cur_data->value_free(cur_data->v);
-            ht->free_data(cur_data)
+            ht->value_free(cur_data->value);
+            ht->free_data(ht->value_free, cur_data);
             cur_data = new_data;
         }
 
@@ -154,7 +160,7 @@ void* get_data(hash_table* ht, find_ht_data* find) {
 
     basket = get_basket(ht, find->hash_key, find->hash_key_size);
     basket_lock(basket, read_lock);
-    data = find_data_in_basket(basket, find->find_key);
+    data = find_data_in_basket(ht, basket, find->find_key);
 
     if (data != NULL) {
         result = ht->copy(data->value);
@@ -168,13 +174,13 @@ void* get_data(hash_table* ht, find_ht_data* find) {
 void set_data(hash_table* ht, create_ht_data* new_data) {
     ht_basket* basket;
     ht_data* data;
-    size_t current_ht_size;
+    int data_size;
 
     basket = get_basket(ht, new_data->hash_key, new_data->hash_key_size);
 
     basket_lock(basket, write_lock);
 
-    data = find_data_in_basket(basket, new_data->find_key);
+    data = find_data_in_basket(ht, basket, new_data->find_key);
     if (data == NULL) {
         if (basket->first == NULL) {
             data = basket->first = basket->last = wcalloc(sizeof(ht_data));
@@ -186,14 +192,14 @@ void set_data(hash_table* ht, create_ht_data* new_data) {
         data->find_key = new_data->find_key;
         data->value = new_data->value;
     } else {
-        atomic_fetch_sub(&(ht->cur_ht_size, data->ht_data_size));
+        atomic_fetch_sub(&(ht->cur_ht_size), data->ht_data_size);
         ht->value_free(data->value);
         data->value = new_data->value;
     }
 
-    int data_size = new_data->find_key_size + new_data->value_size + sizeof(ht_data);
+    data_size = new_data->find_key_size + new_data->value_size + sizeof(ht_data);
 
-    atomic_fetch_add(&(ht->cur_ht_size, data_size));
+    atomic_fetch_add(&(ht->cur_ht_size), data_size);
 
     data->last_time = time(NULL);
     if (data->last_time == -1) {
@@ -207,13 +213,12 @@ void set_data(hash_table* ht, create_ht_data* new_data) {
 void set_data_if_not_exist(hash_table* ht, create_ht_data* new_data) {
     ht_basket* basket;
     ht_data* data;
-    size_t current_ht_size;
 
     basket = get_basket(ht, new_data->hash_key, new_data->hash_key_size);
 
     basket_lock(basket, write_lock);
 
-    data = find_data_in_basket(basket, new_data->find_key);
+    data = find_data_in_basket(ht, basket, new_data->find_key);
     if (data == NULL) {
         if (basket->first == NULL) {
             data = basket->first = basket->last = wcalloc(sizeof(ht_data));
@@ -225,7 +230,7 @@ void set_data_if_not_exist(hash_table* ht, create_ht_data* new_data) {
         data->find_key = new_data->find_key;
         data->value = new_data->value;
 
-        atomic_fetch_add(&(ht->cur_ht_size, new_data->find_key_size + new_data->value_size + sizeof(ht_data)));
+        atomic_fetch_add(&(ht->cur_ht_size), new_data->find_key_size + new_data->value_size + sizeof(ht_data));
         data->last_time = time(NULL);
         if (data->last_time == -1) {
             char* err = strerror(errno);
@@ -262,7 +267,7 @@ int delete_data(hash_table* ht, find_ht_data* find) {
         return 0;
     }
 
-    free_data_from_ht(basket, data, prev_data);
+    free_data_from_ht(ht, basket, data, prev_data);
     basket_unlock(basket);
 
     return 1;

@@ -1,3 +1,8 @@
+#include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "alloc.h"
 #include "ht_table_type.h"
 #include "ht.h"
 
@@ -14,9 +19,6 @@ bool cmp_table_key(void* find_key_1, void* find_key_2) {
 void* copy_table(void* value) {
     table_data* data = (table_data*)value;
     table_data* new_data = wcalloc(sizeof(table_data));
-    new_data->name_size = data->name_size;
-    new_data->name = wcalloc(new_data->name_size * sizeof(char));
-    memcpy(new_data->name,  data->name, new_data->name_size);
     new_data->uniq_num = data->uniq_num;
     return new_data;
 }
@@ -31,6 +33,5 @@ void free_data_table(void (*value_free)(void* value), ht_data* data) {
 
 void value_free_table(void* value) {
     table_data* data = (table_data*)value;
-    free(data->name);
-    free(data;)
+    free(data);
 }

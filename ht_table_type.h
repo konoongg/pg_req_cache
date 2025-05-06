@@ -1,6 +1,9 @@
 #ifndef HT_TABLE_H
 #define HT_TABLE_H
 
+#include <stdbool.h>
+
+#include "ht.h"
 
 typedef struct find_table_key find_table_key;
 typedef struct table_data table_data;

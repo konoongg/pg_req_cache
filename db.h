@@ -36,7 +36,6 @@ struct backend {
 };
 
 
-
 struct table {
     int count_column;
     column* columns;

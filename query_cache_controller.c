@@ -144,8 +144,8 @@ proc_status process_read_db(connection* conn) {
     backend* back = (backend*)conn->data;
     command_to_db* cmd = conn->w_data->data;
     created_cache_respons* res;
-    db_oper_res res = read_from_db(back->conn_with_db, cmd->table, &res);
-    if (res == READ_OPER_RES) {
+    db_oper_res result = read_from_db(back->conn_with_db, cmd->table, &res);
+    if (result == READ_OPER_RES) {
         move_from_wait_to_active(cmd->conn);
 
         cmd = conn->w_data->data;
@@ -171,10 +171,10 @@ proc_status process_read_db(connection* conn) {
         start_event(dbw.wthrd->l, conn->w_data->handle);
         return ALIVE_PROC;
 
-    } else if (res == WAIT_OPER_RES) {
+    } else if (result == WAIT_OPER_RES) {
         move_from_active_to_wait(conn);
         return WAIT_PROC;
-    } else  if (res == ERR_OPER_RES) {
+    } else  if (result == ERR_OPER_RES) {
         abort();
     }
     return DEL_PROC;

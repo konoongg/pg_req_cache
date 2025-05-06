@@ -11,6 +11,7 @@
 #include "command_processor.h"
 #include "connection.h"
 #include "hash.h"
+#include "ht_response_type.h"
 #include "io.h"
 #include "pg_req_creater.h"
 #include "query_cache_controller.h"
@@ -20,7 +21,6 @@ extern config_redis config;
 extern default_resp_answer def_resp;
 command_dict* com_dict;
 
-key_info* create_key_info(char* key);
 process_result do_config(client_req* cl_req, answer* answ, connection* conn);
 process_result do_del(client_req* cl_req, answer* answ, connection* conn);
 process_result do_get(client_req* cl_req, answer* answ, connection* conn);
@@ -73,7 +73,7 @@ process_result do_config(client_req* req, answer* answ, connection* conn) {
 process_result do_get(client_req* cl_req, answer* answ, connection* conn) {
     char* key = cl_req->argv[1];
     int key_size = cl_req->argv_size[1];
-    key_info* key_i = create_key_info(key);
+    key_info* key_i = create_key_info(key, key_size);
     cache_response* res = get_cache(key_i);
 
     if (res == NULL) {
@@ -84,8 +84,8 @@ process_result do_get(client_req* cl_req, answer* answ, connection* conn) {
     }
 
     destroy_key_info(key_i);
-    create_array_resp(answ, v);
-    free_values(v);
+    create_array_resp(answ, res);
+    value_free_response(res);
     return DONE;
 }
 
@@ -103,7 +103,7 @@ process_result do_set(client_req* cl_req, answer* answ, connection* conn) {
     int key_size = cl_req->argv_size[1];
     int value_size = cl_req->argv_size[2];
     created_cache_respons* res;
-
+    char* req_to_db;
 
     key_info* key_i = create_key_info(key, key_size);
     res = create_response_by_resp(key_i->table, value, value_size);
@@ -115,8 +115,9 @@ process_result do_set(client_req* cl_req, answer* answ, connection* conn) {
 
     memcpy(answ->answer, def_resp.ok.answer, answ->answer_size);
     move_from_active_to_wait(conn);
-    char* req_to_db = create_pg_set(key_i, res->res);
-    register_command(key_i, req_to_db, conn, CACHE_SYNC);
+    req_to_db = create_pg_set(key_i, res->res);
+    register_command(NULL, req_to_db, conn, CACHE_SYNC);
+    destroy_key_info(key_i);
     return DB_APPROVE;
 }
 
@@ -126,13 +127,10 @@ process_result do_set(client_req* cl_req, answer* answ, connection* conn) {
 * and then an event is registered to delete the data from the database.
 */
 process_result do_del(client_req* cl_req, answer* answ, connection* conn) {
-    char* key = cl_req->argv[1];
     char* req_to_db;
     int count_del_keys = cl_req->argc - 1;
-    key_info* del_keys = wcalloc(count_del_keys * sizeof(char*));
+    key_info** del_keys = wcalloc(count_del_keys * sizeof(key_info*));
     int count_del = 0;
-    int key_size = cl_req->argv_size[1];
-    key_info* key_i;
 
     for (int i = 1; i < cl_req->argc; ++i) {
         del_keys[i] = create_key_info(cl_req->argv[i], cl_req->argv_size[i]);
@@ -142,8 +140,12 @@ process_result do_del(client_req* cl_req, answer* answ, connection* conn) {
     move_from_active_to_wait(conn);
 
     req_to_db = create_pg_del(count_del_keys, del_keys);
-    register_command(key_i->table, req_to_db, conn, CACHE_SYNC, key, key_size);
+    register_command(NULL, req_to_db, conn, CACHE_SYNC);
 
+    for (int i = 0; i < count_del_keys; ++i) {
+        destroy_key_info(del_keys[i]);
+    }
+    free(del_keys);
     create_num_resp(answ, count_del);
     return DB_APPROVE;
 }

@@ -10,7 +10,7 @@
 extern config_redis config;
 
 
-char* create_pg_get(key_info* key_i);{
+char* create_pg_get(key_info* key_i){
     int size_req = SELECT_BASE_SIZE + key_i->column_size + key_i->table_size + key_i->value_size + 1; // \0(+1)
     char* bd_req = wcalloc(size_req * sizeof(char));
     snprintf(bd_req, size_req, "SELECT * FROM %s WHERE %s = '%s';", key_i->table, key_i->column, key_i->value);
@@ -18,7 +18,7 @@ char* create_pg_get(key_info* key_i);{
     return bd_req;
 }
 
-char* create_pg_del(int count, key_info* key_i) {
+char* create_pg_del(int count, key_info** key_i) {
     char* bd_req;
 
     int del_cond_index = 0;
@@ -61,9 +61,9 @@ char* create_pg_set(key_info* key_i, cache_response* data) {
     int count_attr = data->count_fields;
 
     for (int i = 0; i < count_attr; ++i) {
-        columns_name_size += strlen(data->columns[i].column_name);
-        set_values_size += strlen(data->columns[i].column_name) + 1; // +1 - =
-        switch(data->columns[i].type) {
+        columns_name_size += strlen(data->columns[i]->column_name);
+        set_values_size += strlen(data->columns[i]->column_name) + 1; // +1 - =
+        switch(data->columns[i]->type) {
             case STRING:
                 string* str = (string*)data->values[0][i].data;
                 columns_value_size += str->size + 2; // 'str'
@@ -71,7 +71,7 @@ char* create_pg_set(key_info* key_i, cache_response* data) {
                 break;
             case INT:
                 char str_num[MAX_STR_NUM_SIZE];
-                int* num = (int*)data->v->values[0][i].data;
+                int* num = (int*)data->values[0][i].data;
                 snprintf(str_num, MAX_STR_NUM_SIZE, "%d", *num);
                 set_values_size += strlen(str_num);
                 columns_value_size += strlen(str_num);
@@ -85,17 +85,17 @@ char* create_pg_set(key_info* key_i, cache_response* data) {
     set_values = wcalloc((set_values_size + 1) * sizeof(char));
     for (int i = 0; i < count_attr; ++i) {
 
-        int c_name_size = strlen(data->columns[i].column_name);
-        memcpy(columns_name + columns_name_index, data->columns[i].column_name, c_name_size);
+        int c_name_size = strlen(data->columns[i]->column_name);
+        memcpy(columns_name + columns_name_index, data->columns[i]->column_name, c_name_size);
         columns_name_index += c_name_size;
 
-        memcpy(set_values + set_values_index, data->columns[i].column_name, c_name_size);
+        memcpy(set_values + set_values_index, data->columns[i]->column_name, c_name_size);
         set_values_index += c_name_size;
 
         memcpy(set_values + set_values_index, "=", 1);
         set_values_index += 1;
 
-        switch(data->columns[i].type) {
+        switch(data->columns[i]->type) {
             case STRING:
                 string* str = (string*)data->values[0][i].data;
                 memcpy(columns_value + columns_value_index, "\'", 1);
@@ -144,7 +144,7 @@ char* create_pg_set(key_info* key_i, cache_response* data) {
     columns_name[columns_name_size] = '\0';
     columns_value[columns_value_size] = '\0';
     set_values[set_values_size] = '\0';
-    size_req += strlen(table) + 2 * columns_name_size + columns_value_size + set_values_size;
+    size_req += key_i->table_size + 2 * columns_name_size + columns_value_size + set_values_size;
     bd_req = wcalloc(size_req * sizeof(char));
     snprintf(bd_req, size_req, "INSERT INTO %s (%s) VALUES (%s) ON CONFLICT (%s) DO UPDATE SET %s;",
                                         key_i->table, columns_name, columns_value, key_i->column, set_values);

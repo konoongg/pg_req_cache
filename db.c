@@ -6,6 +6,7 @@
 #include "libpq-fe.h"
 
 #include "alloc.h"
+#include "cache_serializer.h"
 #include "cache.h"
 #include "config.h"
 #include "connection.h"
@@ -61,7 +62,7 @@ db_oper_res read_from_db(PGconn* conn, char* t, created_cache_respons** res) {
         return ERR_OPER_RES;
     } else if (PQconnectPoll(conn) == PGRES_POLLING_OK) {
         PGresult* result = PQgetResult(conn);
-        *res = create_req_by_pg(result, t);
+        *res = create_response_by_pg(result, t);
 
         PQclear(result);
 

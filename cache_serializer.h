@@ -1,7 +1,9 @@
 #ifndef CACHE_SE_H
 #define CACHE_SE_H
 
-#include "ht_value_type.h"
+#include "libpq-fe.h"
+
+#include "storage_data.h"
 
 typedef struct key_info key_info;
 

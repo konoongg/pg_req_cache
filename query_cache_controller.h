@@ -3,6 +3,7 @@
 
 #include <pthread.h>
 
+#include "cache_serializer.h"
 #include "db.h"
 #include "event.h"
 

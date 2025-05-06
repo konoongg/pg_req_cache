@@ -1,7 +1,12 @@
-#include "ht_value_type.h"
-#include "ht.h"
+#include <stdlib.h>
+#include <string.h>
 
-bool cmp_table_key(void* find_key_1, void* find_key_2) {
+#include "alloc.h"
+#include "ht_response_type.h"
+#include "ht.h"
+#include "storage_data.h"
+
+bool cmp_response_key(void* find_key_1, void* find_key_2) {
     find_value_key* key_1 = find_key_1;
     find_value_key* key_2 = find_key_2;
     if (memcmp(key_1->key, key_2->key, key_1->key_size) == 0 &&
@@ -12,29 +17,29 @@ bool cmp_table_key(void* find_key_1, void* find_key_2) {
     return false;
 }
 
-void* copy_value(void* data) {
-    value* v = (value*)data;
+void* copy_response(void* data) {
+    cache_response* v = (cache_response*)data;
 
     int count_tuples = v->count_tuples;
     int count_fields = v->count_fields;
 
-    value* new_v = wcalloc(sizeof(value));
+    cache_response* new_v = wcalloc(sizeof(cache_response));
     new_v->count_tuples = count_tuples;
     new_v->count_fields = count_fields;
-    new_v->values = wcalloc(count_tuples * sizeof(attr*));
+    new_v->values = wcalloc(count_tuples * sizeof(cache_attr*));
+    new_v->columns = wcalloc(count_fields * sizeof(column*));
+
+    for (int i = 0; i < count_fields; ++i) {
+        new_v->columns[i] = v->columns[i];
+    }
 
     for (int i = 0; i < count_tuples; ++i) {
-        new_v->values[i] = wcalloc(count_fields * sizeof(attr));
+        new_v->values[i] = wcalloc(count_fields * sizeof(cache_attr));
         for (int j = 0; j < count_fields; ++j ) {
-            int column_name_size = strlen(v->values[i][j].column_name) + 1;
-            attr* a = &(new_v->values[i][j]);
-            a->type = v->values[i][j].type;
-
-            a->column_name = wcalloc(column_name_size * sizeof(char));
-            memcpy(a->column_name, v->values[i][j].column_name, column_name_size);
+            cache_attr* a = &(new_v->values[i][j]);
             a->data = wcalloc(sizeof(db_data));
 
-            switch (a->type) {
+            switch (new_v->columns[j]->type) {
                 case INT:
                     a->data->num = v->values[i][j].data->num;
                     break;
@@ -50,7 +55,7 @@ void* copy_value(void* data) {
     return new_v;
 }
 
-void free_data_value(void (*value_free)(void* v), ht_data* data) {
+void free_data_response(void (*value_free)(void* v), ht_data* data) {
     find_value_key* find_key = data->find_key;
     free(find_key->key);
     value_free(data->value);
@@ -58,19 +63,18 @@ void free_data_value(void (*value_free)(void* v), ht_data* data) {
     free(data);
 }
 
-void value_free_value(void* data) {
-    value* v = (value*)data;
+void value_free_response(void* data) {
+    cache_response* v = (cache_response*)data;
     int count_tuples = v->count_tuples;
     int count_field = v->count_fields;
 
      for (int i = 0; i < count_tuples; ++i) {
         for (int j = 0; j < count_field; ++j) {
-            free(v->values[i][j].column_name);
             free(v->values[i][j].data);
         }
         free(v->values[i]);
     }
-
+    free(v->columns);
     free(v->values);
     free(v);
 }

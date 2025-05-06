@@ -14,8 +14,8 @@ OBJS = \
 	db.o \
 	event.o \
 	hash.o \
+	ht_response_type.o \
 	ht_table_type.o \
-	ht_value_type.o \
 	ht.o \
 	io.o \
 	pg_req_creater.o \
@@ -30,7 +30,7 @@ EXTENSION = pg_redis_proxy
 DATA = pg_redis_proxy--1.1.sql
 
 SHLIB_LINK += -lev -I/home/konoongg/home/postgres/install/include -lpq
-PG_CPPFLAGS += -lev -I/home/konoongg/home/postgres/install/include -lpq
+PG_CPPFLAGS += -std=c11 -lev -I/home/konoongg/home/postgres/install/include -lpq
 
 
 
