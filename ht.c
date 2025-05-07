@@ -20,13 +20,13 @@ void basket_lock(ht_basket* basket, bool is_read_lock) {
     if (is_read_lock) {
         int err = pthread_rwlock_rdlock(basket->lock);
         if (err != 0) {
-            ereport(INFO, errmsg("basket_lock: pthread_rwlock_rdlock() failed: %s\n", strerror(err)));
+            ////ereport(INFO, errmsg("basket_lock: pthread_rwlock_rdlock() failed: %s\n", strerror(err)));
             abort();
         }
     } else {
         int err = pthread_rwlock_wrlock(basket->lock);
         if (err != 0) {
-            ereport(INFO, errmsg("basket_lock: pthread_rwlock_rdlock() failed: %s\n", strerror(err)));
+            ////ereport(INFO, errmsg("basket_lock: pthread_rwlock_rdlock() failed: %s\n", strerror(err)));
             abort();
         }
     }
@@ -35,7 +35,7 @@ void basket_lock(ht_basket* basket, bool is_read_lock) {
 void basket_unlock(ht_basket* basket) {
     int err = pthread_rwlock_unlock(basket->lock);
     if (err != 0) {
-        ereport(INFO, errmsg("basket_lock: pthread_rwlock_unlock() failed: %s\n", strerror(err)));
+        ////ereport(INFO, errmsg("basket_lock: pthread_rwlock_unlock() failed: %s\n", strerror(err)));
         abort();
     }
 }
@@ -123,7 +123,7 @@ hash_table* create_ht(create_ht_info* info) {
         (ht->baskets[i]).lock = wcalloc(sizeof(pthread_rwlock_t));
         err = pthread_rwlock_init((ht->baskets[i]).lock, NULL);
         if (err != 0) {
-            ereport(INFO, errmsg("create_ht: pthread_rwlock_init %s", strerror(err)));
+            ////ereport(INFO, errmsg("create_ht: pthread_rwlock_init %s", strerror(err)));
             abort();
         }
     }
@@ -144,7 +144,7 @@ void destroy_ht(hash_table* ht) {
 
         err = pthread_rwlock_destroy(basket->lock);
         if (err != 0) {
-            ereport(INFO, errmsg("free_cache: pthread_rwlock_destroy %s", strerror(err)));
+            ////ereport(INFO, errmsg("free_cache: pthread_rwlock_destroy %s", strerror(err)));
             abort();
         }
         free((void*) basket->lock);
@@ -154,6 +154,8 @@ void destroy_ht(hash_table* ht) {
 }
 
 void* get_data(hash_table* ht, find_ht_data* find) {
+
+    ////ereport(INFO, errmsg("get_data: start"));
     ht_basket* basket;
     ht_data* data;
     void* result = NULL;
@@ -167,6 +169,8 @@ void* get_data(hash_table* ht, find_ht_data* find) {
     }
 
     basket_unlock(basket);
+
+    ////ereport(INFO, errmsg("get_data: key: %p result %p", find->find_key, result));
     return result;
 }
 
@@ -204,7 +208,7 @@ void set_data(hash_table* ht, create_ht_data* new_data) {
     data->last_time = time(NULL);
     if (data->last_time == -1) {
         char* err = strerror(errno);
-        ereport(INFO, errmsg("set_cache: time error  %s", err));
+        ////ereport(INFO, errmsg("set_cache: time error  %s", err));
         abort();
     }
     basket_unlock(basket);
@@ -234,7 +238,7 @@ void set_data_if_not_exist(hash_table* ht, create_ht_data* new_data) {
         data->last_time = time(NULL);
         if (data->last_time == -1) {
             char* err = strerror(errno);
-            ereport(INFO, errmsg("set_cache: time error  %s", err));
+            ////ereport(INFO, errmsg("set_cache: time error  %s", err));
             abort();
         }
     } else {

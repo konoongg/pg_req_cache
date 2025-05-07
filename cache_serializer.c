@@ -60,6 +60,10 @@ created_cache_respons* create_response_by_resp(char* table, char* value, int val
             memcpy(column_name, value + start_pos, attr_name_size);
             column_name[attr_name_size] = '\0';
             res->columns[cur_count_attr] = get_column_info(table, column_name);
+            if (res->columns[cur_count_attr] == NULL) {
+                ereport(INFO, errmsg("create_response_by_resp: table: %s coulumn %s not found", table, column_name));
+                abort();
+            }
             free(column_name);
 
             data = wcalloc((attr_size + 1) * sizeof(char));
@@ -111,6 +115,10 @@ created_cache_respons* create_response_by_pg(PGresult* result, char* table) {
             return NULL;
         }
         res->columns[column] = get_column_info(table, column_name);
+        if (res->columns[column] == NULL) {
+            ereport(INFO, errmsg("create_response_by_resp: table: %s coulumn %s not found", table, column_name));
+            abort();
+        }
     }
 
     for (int row = 0; row < res->count_tuples; ++row) {
@@ -186,7 +194,7 @@ key_info* create_key_info(char* key, int key_size) {
 
     key_i->table_column_size = dot_position_s - key;
     key_i->table_column = wcalloc((key_i->table_column_size + 1) * sizeof(char));
-    memcpy(key_i->table_column, dot_position_f + 1, key_i->table_column_size);
+    memcpy(key_i->table_column, key, key_i->table_column_size);
     key_i->table_column[key_i->table_column_size] = '\0';
 
     key_i->column_size = dot_position_s - dot_position_f - 1;

@@ -64,6 +64,7 @@ void init_cache(void) {
 * If the data does not exist, it returns NULL.
 */
 cache_response* get_cache(key_info* key_i) {
+    //ereport(INFO, errmsg("get_cache: start"));
     find_ht_data find_table;
     find_ht_data find_value;
 
@@ -72,6 +73,8 @@ cache_response* get_cache(key_info* key_i) {
     find_table_key ft_key;
     find_value_key fv_key;
 
+    //ereport(INFO, errmsg("do_get: table key %s", key_i->table_column));
+    //ereport(INFO, errmsg("do_get: value key %s", key_i->value));
     ft_key.key = key_i->table_column;
     ft_key.key_size = key_i->table_column_size;
 
@@ -81,6 +84,7 @@ cache_response* get_cache(key_info* key_i) {
 
     table_values = get_data(c->tables, &find_table);
     if (table_values == NULL) {
+        //ereport(INFO, errmsg("do_get: %s no found", key_i->table_column));
         return NULL;
     }
 
@@ -91,6 +95,7 @@ cache_response* get_cache(key_info* key_i) {
     find_value.find_key = &fv_key;
     find_value.hash_key = key_i->full_key;
     find_value.hash_key_size = key_i->full_size;
+    //ereport(INFO, errmsg("do_get: value %s ", key_i->value));
     return get_data(c->values, &find_value);
 }
 
@@ -100,6 +105,7 @@ cache_response* get_cache(key_info* key_i) {
 * If it does, the data is updated; if not, new data is added.
 */
 void set_cache(key_info* key_i, cache_response* v, int value_size) {
+    //ereport(INFO, errmsg("set_cache: START"));
     create_ht_data new_value_data;
     find_ht_data f_data;
     find_table_key f_table;
@@ -112,6 +118,7 @@ void set_cache(key_info* key_i, cache_response* v, int value_size) {
     f_data.hash_key_size = key_i->table_column_size;
     f_data.find_key = &f_table;
 
+    //ereport(INFO, errmsg("set_cache: key_i->table_column %s", key_i->table_column));
     t_values = get_data(c->tables, &f_data);
 
     if (t_values == NULL) {
@@ -150,6 +157,7 @@ void set_cache(key_info* key_i, cache_response* v, int value_size) {
 
     new_value_data.value = v;
     new_value_data.value_size = value_size;
+    //ereport(INFO, errmsg("set_cache: key_i->value %s", key_i->value));
     set_data(c->values, &new_value_data);
 }
 
