@@ -4,14 +4,14 @@ clear
 export PYTHONDONTWRITEBYTECODE=1
 
 case "$1" in
-    functional)
-        pytest -s -v ddl/func_test/
+    func)
+        pytest ${PYTEST_OPTIONS} -s -v ddl/func_test/
         ;;
     load)
-        pytest -s -v ddl/load_test/
+        pytest ${PYTEST_OPTIONS} -s -v ddl/load_test/
         ;;
     all)
-        pytest -s  -v ddl/func_test/ ddl/load_test/
+        pytest ${PYTEST_OPTIONS} -s -v ddl/func_test/ ddl/load_test/
         ;;
     *)
         echo "Usage: $0 {functional|load|all}"

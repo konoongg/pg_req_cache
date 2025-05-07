@@ -1,4 +1,3 @@
-
 import pytest
 from psycopg2 import sql
 from t.fixtures.db_fixtures import *
@@ -22,11 +21,10 @@ def test_simple_set_table_tt(create_and_drop_db, cleanup_schema):
     value = create_value(kv)
     command = create_resp_req(" ".join(["set", key, value]))
     answer = create_resp_simple_string("OK")
-
     sock.sendall(command)
 
     response = sock.recv(1024)
-    assert response == answer, f"send {command} - Ожидался ответ {answer}, но получен: {response}"
+    assert response == answer, f"Ожидался ответ {answer}, но получен: {response}"
 
     query = sql.SQL("SELECT * FROM {} WHERE {} = %s AND {} = %s").format(
         sql.Identifier(table_name),
@@ -43,7 +41,6 @@ def test_simple_double_set_table_tt(create_and_drop_db, cleanup_schema):
     db_name = create_and_drop_db
     table_name, columns = create_table_text_text(db_name)
     restart_postgres()
-
     cursor = open_table(db_name)
     sock = create_socket()
 
@@ -97,7 +94,6 @@ def test_simple_set_table_ti(create_and_drop_db, cleanup_schema):
     db_name = create_and_drop_db
     table_name, columns = create_table_text_int(db_name)
     restart_postgres()
-
     cursor = open_table(db_name)
     sock = create_socket()
 

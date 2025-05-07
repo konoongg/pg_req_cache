@@ -71,21 +71,27 @@ process_result do_config(client_req* req, answer* answ, connection* conn) {
 * and return a code indicating that the client needs to wait for the data to be retrieved.
 */
 process_result do_get(client_req* cl_req, answer* answ, connection* conn) {
+    ereport(INFO, errmsg("do_get: start"));
     char* key = cl_req->argv[1];
     int key_size = cl_req->argv_size[1];
     key_info* key_i = create_key_info(key, key_size);
+    ereport(INFO, errmsg("do_get: get"));
     cache_response* res = get_cache(key_i);
+    ereport(INFO, errmsg("do_get: finish get"));
 
     if (res == NULL) {
+        ereport(INFO, errmsg("do_get: res == NULL"));
         char* req_to_db = create_pg_get(key_i);
         move_from_active_to_wait(conn);
         register_command(key_i, key_i->table, key_i->table_size, req_to_db, conn, CACHE_UPDATE);
+        ereport(INFO, errmsg("do_get: DB_REQ"));
         return DB_REQ;
     }
 
     destroy_key_info(key_i);
     create_array_resp(answ, res);
     value_free_response(res);
+    ereport(INFO, errmsg("do_get: DONE"));
     return DONE;
 }
 

@@ -83,6 +83,7 @@ def restart_postgres(timeout: int = 100) -> None:
             pytest.fail(f"Ошибка при выполнении {cmd}: {e}")
     time.sleep(1)
 
+
 def open_table(db_name):
     conn = psycopg2.connect(
         dbname=db_name, host="localhost"

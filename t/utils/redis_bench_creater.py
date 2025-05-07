@@ -14,6 +14,16 @@ class Colors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
+def parse_rps_from_output(output):
+    """Парсит RPS из вывода redis-benchmark"""
+    if not output:
+        return 0.0
+    for line in output.split('\n'):
+        if "throughput summary:" in line:
+            # Разбиваем строку по пробелам и берем третий элемент (индекс 2)
+            return float(line.split()[2])
+    return 0.0
+
 def redis_bench_create_set(pipelines, port, clients, requests, threads, table_name, columns):
     """
     Generates a redis-benchmark command for load testing

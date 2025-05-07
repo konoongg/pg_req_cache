@@ -38,6 +38,7 @@ thread_local wthread wthrd;
 
 //All obtained responses are written to the connection
 proc_status process_write(connection* conn) {
+    ereport(INFO, errmsg("process_write: start"));
     event_data* w_data = conn->w_data;
     answer_list* answers  = (answer_list*)w_data->data;
     answer* cur_answer = answers->first;
@@ -113,6 +114,7 @@ proc_status notify(connection* conn) {
 * All received requests are handled.
 */
 proc_status process_data(connection* conn) {
+    ereport(INFO, errmsg("process_data: start"));
     io_read* r_data = (io_read*)conn->r_data->data;
     answer_list* w_data = (answer_list*)conn->w_data->data;
     client_req* cur_req;
@@ -160,6 +162,7 @@ proc_status process_data(connection* conn) {
 * parse all available data (e.g., if two requests are received, we process both).
 * If an error or connection closure occurs, we release the associated resources. */
 proc_status process_read(connection* conn) {
+    ereport(INFO, errmsg("process_read: start"));
     exit_status status;
     int buffer_free_size;
     int res;
@@ -204,6 +207,7 @@ proc_status process_read(connection* conn) {
 
 // Handling the accept operation: creating a new connection and adding it to the pending queue.
 proc_status process_accept(connection* conn) {
+    ereport(INFO, errmsg("process_accept: start"));
     answer_list* a_list;
     char* read_buffer;
     connection* new_conn;
