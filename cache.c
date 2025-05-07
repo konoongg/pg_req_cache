@@ -25,7 +25,7 @@ bool check_ttl(cache_basket* basket, cache_data* prev_data, cache_data* data);
 cache_basket* get_basket(char* key, int key_size);
 cache_data* find_data_in_basket(cache_basket* basket, char* key, int key_size);
 cache_need_gc add_cache_size(size_t size);
-void basket_lock(cache_basket* basket);
+void basket_lock(cache_basket* basket, bool is_read_lock);
 void basket_unlock(cache_basket* basket);
 void free_data_from_cache(cache_data* data);
 void free_storage(kv_storage storage);
@@ -68,18 +68,26 @@ void sub_cache_size(size_t size) {
     }
 }
 
-void basket_lock(cache_basket* basket) {
-    int err = pthread_mutex_lock(basket->lock);
-    if (err != 0) {
-        printf("basket_lock: pthread_mutex_lock() failed: %s\n", strerror(err));
-        abort();
+void basket_lock(cache_basket* basket, bool is_read_lock) {
+    if (is_read_lock) {
+        int err = pthread_rwlock_rdlock(basket->lock);
+        if (err != 0) {
+            ereport(INFO, errmsg("basket_lock: pthread_rwlock_rdlock() failed: %s\n", strerror(err)));
+            abort();
+        }
+    } else {
+        int err = pthread_rwlock_wrlock(basket->lock);
+        if (err != 0) {
+            ereport(INFO, errmsg("basket_lock: pthread_rwlock_rdlock() failed: %s\n", strerror(err)));
+            abort();
+        }
     }
 }
 
 void basket_unlock(cache_basket* basket) {
-    int err = pthread_mutex_unlock(basket->lock);
+    int err = pthread_rwlock_unlock(basket->lock);
     if (err != 0) {
-        printf("basket_lock: pthread_mutex_unlock() failed: %s\n", strerror(err));
+        ereport(INFO, errmsg("basket_lock: pthread_rwlock_unlock() failed: %s\n", strerror(err)));
         abort();
     }
 }
@@ -127,12 +135,12 @@ void init_cache(void) {
     }
 
     storage = c->storage;
-    storage->hash_func = murmur_hash_2;
+    storage->hash_func = murmur_hash_3;
     storage->kv = wcalloc(c->count_basket * sizeof(cache_basket));
 
     for (int i = 0; i < c->count_basket; ++i) {
-        (storage->kv[i]).lock = wcalloc(sizeof(pthread_mutex_t));
-        err = pthread_mutex_init((storage->kv[i]).lock, NULL);
+        (storage->kv[i]).lock = wcalloc(sizeof(pthread_rwlock_t));
+        err = pthread_rwlock_init((storage->kv[i]).lock, NULL);
         if (err != 0) {
             ereport(INFO, errmsg("init_cache: pthread_mutex_init %s", strerror(err)));
             abort();
@@ -145,19 +153,8 @@ cache_basket* get_basket(char* key, int key_size) {
     kv_storage* storage;
     u_int64_t hash;
 
-    FILE *hash_log;
-
     storage = c->storage;
     hash = storage->hash_func(key, key_size, NULL);
-
-    hash_log = fopen("/home/konoongg/home/work/db/hash.txt", "a");
-    if (hash_log == NULL) {
-        // Если не удалось открыть файл, пишем в лог и продолжаем работу
-    } else {
-        // Записываем хеш и ключ в файл
-        fprintf(hash_log, "hash: %lu\n", hash);
-        fclose(hash_log);
-    }
     return &(storage->kv[hash]);
 }
 
@@ -224,7 +221,7 @@ void cache_timer_delete(time_t check_time) {
         cache_data* cur_data;
         cache_data* prev_data;
 
-        basket_lock(basket);
+        basket_lock(basket, false);
 
         cur_data = basket->first;
         prev_data = NULL;
@@ -258,7 +255,7 @@ value* get_cache(char* key, int key_size) {
 
     basket = get_basket(key, key_size);
 
-    basket_lock(basket);
+    basket_lock(basket, true);
     data = basket->first;
     prev_data = NULL;
     while (data != NULL) {
@@ -289,7 +286,7 @@ void set_cache(cache_data* new_data) {
 
     basket = get_basket(new_data->key, new_data->key_size);
 
-    basket_lock(basket);
+    basket_lock(basket, false);
 
     data = find_data_in_basket(basket, new_data->key, new_data->key_size);
     if (data == NULL) {
@@ -329,7 +326,7 @@ int delete_cache(char* key, int key_size) {
 
     basket = get_basket(key, key_size);
 
-    basket_lock(basket);
+    basket_lock(basket, false);
 
     data = basket->first;
     prev_data = NULL;
@@ -371,7 +368,7 @@ void free_cache(void) {
             free_data_from_cache(cur_data);
             cur_data = new_data;
         }
-        err = pthread_mutex_destroy(basket->lock);
+        err = pthread_rwlock_destroy(basket->lock);
         if (err != 0) {
             ereport(INFO, errmsg("free_cache: pthread_mutex_destroy %s", strerror(err)));
             abort();

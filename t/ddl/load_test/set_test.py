@@ -1,187 +1,64 @@
+import csv
 import sys
 import pytest
+from t.utils.init_cache import init_cache_tt
 from t.utils.redis_bench_creater import *
 from t.fixtures.db_fixtures import *
 from t.utils.create_resp import *
 from t.utils.db_connect import *
 
-def test_t1_p1_n100000_set_table_tt(create_and_drop_db, cleanup_schema):
-    print("START TEST 1")
-    db_name = create_and_drop_db
-    table_name, columns= create_table_text_text(db_name)
-    restart_postgres(100)
+SYSTEM_NAME = "pgcache"  # Название системы (настраивается в скрипте)
+PROGRAM_VERSION = "0.2"       # Версия программы
+DB_STATE = "10000 записей, два текстовых столбца"  # Состояние БД
+THREADS_IN_SYSTEM = 4
 
-    # Redis benchmark setup
-    benchmark_params = {
-        "pipelines": 1,
-        "port": 6379,
-        "clients": 1000,
-        "requests": 100000,
-        "threads": 1,
-        "table_name": table_name,
-        "columns": columns,
-    }
+WORKERS = [1, 4, 8, 16]
+PIPELINE_COUNT = [1, 4, 8, 16]
+REQUEST_COUNT = [10000]
+CLIENT_COUNT = [100, 1000, 5000, 10000]
+PORT = [6379]
 
-    # Generate benchmark command
-    benchmark_cmd = redis_bench_create_set(**benchmark_params)
-    print(f"\nExecuting Redis benchmark: {benchmark_cmd}")
+RESULTS_FILE = "benchmark_results.csv"
 
-    try:
-        print(f"\nExecuting Redis benchmark: {benchmark_cmd}")
-        subprocess.run(
-            benchmark_cmd,
-            shell=True,
-            check=True,
-            executable='/bin/bash',
-            capture_output=False
-        )
-    except subprocess.CalledProcessError as e:
-        pytest.fail(f"Benchmark failed with code {e.returncode}")
-
-def test_t4_p1_n100000_set_table_tt(create_and_drop_db, cleanup_schema):
-
-    print("START TEST 2")
-    db_name = create_and_drop_db
-    table_name, columns= create_table_text_text(db_name)
-    restart_postgres(100)
-
-    # Redis benchmark setup
-    benchmark_params = {
-        "pipelines": 1,
-        "port": 6379,
-        "clients": 1000,
-        "requests": 100000,
-        "threads": 4,
-        "table_name": table_name,
-        "columns": columns,
-    }
-
-    # Generate benchmark command
-    benchmark_cmd = redis_bench_create_set(**benchmark_params)
-    print(f"\nExecuting Redis benchmark: {benchmark_cmd}")
-
-    try:
-        print(f"\nExecuting Redis benchmark: {benchmark_cmd}")
-        subprocess.run(
-            benchmark_cmd,
-            shell=True,
-            check=True,
-            executable='/bin/bash',
-            capture_output=False
-        )
-    except subprocess.CalledProcessError as e:
-        pytest.fail(f"Benchmark failed with code {e.returncode}")
-
-def test_t4_p4_n100000_set_table_tt(create_and_drop_db, cleanup_schema):
-    db_name = create_and_drop_db
-    table_name, columns= create_table_text_text(db_name)
-    restart_postgres(100)
-
-    # Redis benchmark setup
-    benchmark_params = {
-        "pipelines": 4,
-        "port": 6379,
-        "clients": 1000,
-        "requests": 100000,
-        "threads": 4,
-        "table_name": table_name,
-        "columns": columns,
-    }
-
-    # Generate benchmark command
-    benchmark_cmd = redis_bench_create_set(**benchmark_params)
-    print(f"\nExecuting Redis benchmark: {benchmark_cmd}")
-
-    try:
-        print(f"\nExecuting Redis benchmark: {benchmark_cmd}")
-        subprocess.run(
-            benchmark_cmd,
-            shell=True,
-            check=True,
-            executable='/bin/bash',
-            capture_output=False
-        )
-    except subprocess.CalledProcessError as e:
-        pytest.fail(f"Benchmark failed with code {e.returncode}")
+try:
+    with open(RESULTS_FILE, 'x', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            "Операция",
+            "Потоки в системе",
+            "Система",
+            "Workers",
+            "Pipeline",
+            "Request_count",
+            "Client_count",
+            "Описание",
+            "RPS",
+            "Версия программы",
+            "Комментарий",
+            "Состояние БД",
+        ])
+except FileExistsError:
+    pass
 
 
-def test_t8_p8_n100000_set_table_tt(create_and_drop_db, cleanup_schema):
-    db_name = create_and_drop_db
-    table_name, columns= create_table_text_text(db_name)
-    restart_postgres(100)
 
-    # Redis benchmark setup
-    benchmark_params = {
-        "pipelines": 8,
-        "port": 6379,
-        "clients": 1000,
-        "requests": 100000,
-        "threads": 8,
-        "table_name": table_name,
-        "columns": columns,
-    }
-
-    # Generate benchmark command
-    benchmark_cmd = redis_bench_create_set(**benchmark_params)
-    print(f"\nExecuting Redis benchmark: {benchmark_cmd}")
-
-    try:
-        print(f"\nExecuting Redis benchmark: {benchmark_cmd}")
-        subprocess.run(
-            benchmark_cmd,
-            shell=True,
-            check=True,
-            executable='/bin/bash',
-            capture_output=False
-        )
-    except subprocess.CalledProcessError as e:
-        pytest.fail(f"Benchmark failed with code {e.returncode}")
-
-
-def test_t4_p1_n100000_set_table_tt(create_and_drop_db, cleanup_schema):
-    db_name = create_and_drop_db
-    table_name, columns = create_table_text_text(db_name)
-    restart_postgres(100)  
-    # Redis benchmark setup
-    benchmark_params = {
-        "pipelines": 1,
-        "port": 6379,
-        "clients": 1000,
-        "requests": 100000,
-        "threads": 4,
-        "table_name": table_name,
-        "columns": columns,
-    }
-
-    # Generate benchmark command
-    benchmark_cmd = redis_bench_create_set(**benchmark_params)
-    print(f"\nExecuting Redis benchmark: {benchmark_cmd}")
-
-    try:
-        print(f"\nExecuting Redis benchmark: {benchmark_cmd}")
-        subprocess.run(
-            benchmark_cmd,
-            shell=True,
-            check=True,
-            executable='/bin/bash',
-            capture_output=False
-        )
-    except subprocess.CalledProcessError as e:
-        pytest.fail(f"Benchmark failed with code {e.returncode}")
-
-
-def test_t1_p4_n100000_set_table_tt(create_and_drop_db, cleanup_schema):
+@pytest.mark.parametrize("workers", WORKERS, ids=lambda x: f"workers={x}")
+@pytest.mark.parametrize("pipeline", PIPELINE_COUNT, ids=lambda x: f"pipeline={x}")
+@pytest.mark.parametrize("request_count", REQUEST_COUNT, ids=lambda x: f"request_count={x}")
+@pytest.mark.parametrize("client_count", CLIENT_COUNT, ids=lambda x: f"client_count={x}")
+@pytest.mark.parametrize("port_num", PORT, ids=lambda x: f"port_num={x}")
+def test_set(create_and_drop_db, workers, pipeline, request_count, client_count, port_num, cleanup_schema):
     db_name = create_and_drop_db
     table_name, columns = create_table_text_text(db_name)
     restart_postgres(100)
 
     # Redis benchmark setup
     benchmark_params = {
-        "pipelines": 4,
-        "port": 6379,
-        "clients": 1000,
-        "requests": 100000,
-        "threads": 1,
+        "pipelines": pipeline,
+        "port": port_num,
+        "clients": client_count,
+        "requests": request_count,
+        "threads": workers,
         "table_name": table_name,
         "columns": columns,
     }
@@ -189,15 +66,33 @@ def test_t1_p4_n100000_set_table_tt(create_and_drop_db, cleanup_schema):
     # Generate benchmark command
     benchmark_cmd = redis_bench_create_set(**benchmark_params)
     print(f"\nExecuting Redis benchmark: {benchmark_cmd}")
-
     try:
-        print(f"\nExecuting Redis benchmark: {benchmark_cmd}")
-        subprocess.run(
+        result = subprocess.run(
             benchmark_cmd,
             shell=True,
             check=True,
             executable='/bin/bash',
-            capture_output=False
+            capture_output=True,
+            text = True
         )
+        rps = parse_rps_from_output(result.stdout)
+
+        with open(RESULTS_FILE, 'a', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    "SET",
+                    THREADS_IN_SYSTEM,
+                    SYSTEM_NAME,
+                    workers,
+                    pipeline,
+                    request_count,
+                    client_count,
+                    "",
+                    rps,
+                    PROGRAM_VERSION,
+                    "",
+                    DB_STATE,
+                ])
+
     except subprocess.CalledProcessError as e:
         pytest.fail(f"Benchmark failed with code {e.returncode}")

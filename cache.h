@@ -35,7 +35,7 @@ void set_cache(cache_data* new_data);
 struct cache_basket {
     cache_data* first;
     cache_data* last;
-    pthread_mutex_t* lock;
+    pthread_rwlock_t* lock;
 };
 
 /*

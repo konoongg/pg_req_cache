@@ -1,3 +1,4 @@
+import time
 from typing import List
 from psycopg2 import sql
 
@@ -80,6 +81,7 @@ def restart_postgres(timeout: int = 100) -> None:
             pytest.fail(f"Команда {cmd} не завершилась за {timeout} секунд")
         except subprocess.CalledProcessError as e:
             pytest.fail(f"Ошибка при выполнении {cmd}: {e}")
+    time.sleep(1)
 
 
 def open_table(db_name):
