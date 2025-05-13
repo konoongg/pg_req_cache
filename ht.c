@@ -208,7 +208,7 @@ void set_data(hash_table* ht, create_ht_data* new_data) {
     data->last_time = time(NULL);
     if (data->last_time == -1) {
         char* err = strerror(errno);
-        ////ereport(INFO, errmsg("set_cache: time error  %s", err));
+        ereport(INFO, errmsg("set_cache: time error  %s", err));
         abort();
     }
     basket_unlock(basket);
@@ -238,7 +238,7 @@ void set_data_if_not_exist(hash_table* ht, create_ht_data* new_data) {
         data->last_time = time(NULL);
         if (data->last_time == -1) {
             char* err = strerror(errno);
-            ////ereport(INFO, errmsg("set_cache: time error  %s", err));
+            ereport(INFO, errmsg("set_cache: time error  %s", err));
             abort();
         }
     } else {

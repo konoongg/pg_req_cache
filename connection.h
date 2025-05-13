@@ -99,6 +99,7 @@ struct conn_list {
 
 //A structure describing the execution loop, containing queues for active and pending connections.
 struct wthread {
+    int id;
     conn_list* active;
     conn_list* wait;
     event_loop* l;

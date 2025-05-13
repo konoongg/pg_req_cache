@@ -2,6 +2,7 @@
 #define CONFIG_PARSER_H
 
 #include <stdint.h>
+#include <stdlib.h>
 
 #define MAX_STR_NUM_SIZE 20
 

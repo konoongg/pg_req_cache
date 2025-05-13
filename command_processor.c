@@ -16,6 +16,7 @@
 #include "pg_req_creater.h"
 #include "query_cache_controller.h"
 #include "resp_creater.h"
+#include "stats.h"
 
 extern config_redis config;
 extern default_resp_answer def_resp;
@@ -24,6 +25,7 @@ command_dict* com_dict;
 process_result do_config(client_req* cl_req, answer* answ, connection* conn);
 process_result do_del(client_req* cl_req, answer* answ, connection* conn);
 process_result do_get(client_req* cl_req, answer* answ, connection* conn);
+process_result do_info(client_req* req, answer* answ, connection* conn);
 process_result do_ping(client_req* cl_req, answer* answ, connection* conn);
 process_result do_set(client_req* cl_req, answer* answ, connection* conn);
 void free_command(int hash);
@@ -35,8 +37,16 @@ redis_command commands[] = {
     {"get", do_get},
     {"set", do_set},
     {"ping", do_ping},
-    {"config", do_config}
+    {"config", do_config},
+    {"info", do_info}
 };
+
+process_result do_info(client_req* req, answer* answ, connection* conn) {
+    answ->answer_size = def_resp.pong.answer_size;
+    answ->answer = wcalloc(answ->answer_size  * sizeof(char));
+    memcpy(answ->answer, def_resp.pong.answer, answ->answer_size);
+    return DONE;
+}
 
 //In the case of receiving a PING command, send PONG back to the user.
 process_result do_ping(client_req* req, answer* answ, connection* conn) {
@@ -80,8 +90,11 @@ process_result do_get(client_req* cl_req, answer* answ, connection* conn) {
     //ereport(INFO, errmsg("do_get: finish get %p", res));
 
     if (res == NULL) {
+        char* req_to_db;
+
+        report_cache_miss();
         //ereport(INFO, errmsg("do_get: res == NULL table_size %d", key_i->table_size));
-        char* req_to_db = create_pg_get(key_i);
+        req_to_db = create_pg_get(key_i);
         move_from_active_to_wait(conn);
         register_command(key_i, key_i->table, key_i->table_size, req_to_db, conn, CACHE_UPDATE);
         //ereport(INFO, errmsg("do_get: DB_REQ"));
