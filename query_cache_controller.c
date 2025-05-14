@@ -18,6 +18,7 @@
 db_worker dbw;
 extern config_redis config;
 
+
 command_to_db* get_command(void);
 proc_status notify_db(connection* conn);
 proc_status process_read_db(connection* conn);
@@ -88,17 +89,15 @@ void register_command(key_info* key_i, char* table, int table_size, char* req, c
 // Retrieving a command for processing from the queue
 command_to_db* get_command(void) {
     command_to_db* cmd;
-
     dbw_lock();
-
     if (dbw.commands->first == NULL) {
         dbw_unlock();
         return NULL;
     }
 
+
     cmd = dbw.commands->first;
 
-    ereport(INFO, errmsg("process_read_db: dbw.commands->first %p dbw.commands->first->next %p", dbw.commands->first, dbw.commands->first->next));
     dbw.commands->first = dbw.commands->first->next;
     dbw.commands->count_commands--;
     assert(dbw.commands->count_commands >= 0);
@@ -107,7 +106,6 @@ command_to_db* get_command(void) {
     }
 
     dbw_unlock();
-
     return cmd;
 }
 
@@ -117,6 +115,7 @@ proc_status process_write_db(connection* conn) {
     command_to_db* cmd = conn->w_data->data;
     db_oper_res res = write_to_db(back->conn_with_db, cmd->cmd);
     if (res == WRITE_OPER_RES) {
+
         conn->proc = process_read_db;
         conn->status = READ_DB;
         move_from_active_to_wait(conn);
@@ -154,21 +153,15 @@ proc_status process_read_db(connection* conn) {
 
         cmd = conn->w_data->data;
 
-        ereport(INFO, errmsg("process_read_db: event_notify %d", cmd->conn->wthrd->not->pipe_fd[0]));
         event_notify(cmd->conn->wthrd->not);
-        //ereport(INFO, errmsg("process_read_db: READ_OPER_RES"));
         if (cmd->reason == CACHE_UPDATE) {
-            //ereport(INFO, errmsg("process_read_db: CACHE_UPDATE"));
             set_cache(cmd->key, res->res, res->size );
-            //ereport(INFO, errmsg("process_read_db: CACHE_UPDATE FINISH"));
         }
         free_db_command(cmd);
         stop_event(dbw.wthrd->l, conn->r_data->handle);
 
         conn->w_data->data = get_command();
-        ereport(INFO, errmsg("process_read_db: conn->w_data->data %p", conn->w_data->data));
         if (conn->w_data->data == NULL) {
-            ereport(INFO, errmsg("process_read_db: conn->w_data->data == NULL"));
             back->is_free = true;
             conn->proc = notify_db;
             conn->status = NOTIFY_DB;
@@ -179,6 +172,7 @@ proc_status process_read_db(connection* conn) {
         conn->proc = process_write_db;
         conn->status = WRITE_DB;
         start_event(dbw.wthrd->l, conn->w_data->handle);
+
         return ALIVE_PROC;
 
     } else if (result == WAIT_OPER_RES) {
@@ -201,25 +195,21 @@ proc_status process_read_db(connection* conn) {
 * Then, we assign it new work to process the request, if any exists.
 */
 proc_status notify_db(connection* conn) {
-    ereport(INFO, errmsg("notify_db: start"));
-
     not_status not_s = event_get_notify(conn->wthrd->not);
     if (not_s == NOT_TA) {
         return ALIVE_PROC;
     }
 
     dbw_lock();
-    ereport(INFO, errmsg("notify_db: dbw.commands->count_commands  %d", dbw.commands->count_commands ));
     if (dbw.commands->count_commands == 0) {
         move_from_active_to_wait(conn);
+        dbw_unlock();
         return WAIT_PROC;
     }
     dbw_unlock();
 
 
     for (int i = 0; i < dbw.count_backends; ++i) {
-
-        ereport(INFO, errmsg("notify_db: dbw.backends[%d].is_free %d", i, dbw.backends[i].is_free));
         if (dbw.backends[i].is_free) {
             dbw.backends[i].is_free = false;
             move_from_wait_to_active(dbw.backends[i].conn);
@@ -270,7 +260,7 @@ void init_db_worker(void) {
     dbw.lock = wcalloc(sizeof(pthread_mutex_t));
     err = pthread_mutex_init(dbw.lock, NULL);
     if (err != 0){
-        //ereport(INFO, errmsg("init_db_worker: pthread_mutex_init %s", strerror(err)));
+        ereport(INFO, errmsg("init_db_worker: pthread_mutex_init %s", strerror(err)));
         abort();
     }
 
@@ -296,7 +286,7 @@ void init_db_worker(void) {
 
     err = pthread_create(&(db_tid), NULL, start_db_worker, NULL);
     if (err) {
-        //ereport(INFO, errmsg("init_worker: pthread_create error %s", strerror(err)));
+        ereport(INFO, errmsg("init_worker: pthread_create error %s", strerror(err)));
         abort();
     }
 }
