@@ -126,6 +126,7 @@ process_result do_set(client_req* cl_req, answer* answ, connection* conn) {
 
     key_info* key_i = create_key_info(key, key_size);
     res = create_response_by_resp(key_i->table, value, value_size);
+    req_to_db = create_pg_set(key_i, res->res);
 
     set_cache(key_i, res->res, res->size);
 
@@ -134,7 +135,6 @@ process_result do_set(client_req* cl_req, answer* answ, connection* conn) {
 
     memcpy(answ->answer, def_resp.ok.answer, answ->answer_size);
     move_from_active_to_wait(conn);
-    req_to_db = create_pg_set(key_i, res->res);
     register_command(NULL, key_i->table, key_i->table_size, req_to_db, conn, CACHE_SYNC);
     destroy_key_info(key_i);
     return DB_APPROVE;
