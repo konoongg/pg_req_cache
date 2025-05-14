@@ -7,21 +7,32 @@
 
 typedef struct create_ht_info create_ht_info;
 typedef struct create_ht_data create_ht_data;
+typedef struct data_version data_version;
 typedef struct find_ht_data find_ht_data;
 typedef struct hash_table hash_table;
 typedef struct ht_basket ht_basket;
 typedef struct ht_data ht_data;
 
 hash_table* create_ht(create_ht_info* info);
+data_version* get_data(hash_table* ht, find_ht_data* find);
 int delete_data(hash_table* ht, find_ht_data* find);
 void destroy_ht(hash_table* ht);
+void drop_version(data_version* version);
 void ht_timer_delete(hash_table* ht, time_t check_time);
 void set_data_if_not_exist(hash_table* ht, create_ht_data* new_data);
 void set_data(hash_table* ht, create_ht_data* new_data);
-void* get_data(hash_table* ht, find_ht_data* find);
+
+struct data_version {
+    _Atomic int usage_counter;
+    bool dirty;
+    data_version* next;
+    void* value;
+};
 
 struct ht_data {
-    void* value;
+    data_version* value_first;
+    data_version* value_cur;
+
     ht_data* next;
     void* find_key;
     time_t last_time;
@@ -31,7 +42,7 @@ struct ht_data {
 struct create_ht_info {
     bool (*cmp_key)(void* find_key_1, void* find_key_2);
     uint64_t (*hash_func)(void* key, int len, void* argv);
-    void (*free_data)(void (*value_free)(void* value), ht_data* data);
+    void (*free_data)(ht_data* data);
     void (*value_free)(void* value);
     void* (*copy)(void* value);
 
@@ -65,7 +76,7 @@ struct ht_basket {
 struct hash_table {
     bool (*cmp_key)(void* find_key_1, void* find_key_2);
     uint64_t (*hash_func)(void* key, int len, void* argv);
-    void (*free_data)(void (*value_free)(void* value), ht_data* data);
+    void (*free_data)(ht_data* data);
     void (*value_free)(void* value);
     void* (*copy)(void* value);
 

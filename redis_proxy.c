@@ -14,6 +14,7 @@
 #include "query_cache_controller.h"
 #include "resp_creater.h"
 #include "socket_wrapper.h"
+#include "stats.h"
 #include "worker.h"
 
 PG_MODULE_MAGIC;
@@ -24,6 +25,7 @@ PGDLLEXPORT void proxy_start_work(Datum main_arg);
 void clean_up(void);
 
 config_redis config;
+statistics stats;
 
 void _PG_init(void) {
     register_proxy();
@@ -53,6 +55,9 @@ void proxy_start_work(Datum main_arg) {
 
     init_config();
     ereport(INFO, errmsg("finish init config"));
+
+    init_stats();
+    ereport(INFO, errmsg("finish init stats"));
 
     init_def_resp();
 

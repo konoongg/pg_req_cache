@@ -6,9 +6,10 @@ from t.fixtures.db_fixtures import *
 from t.utils.create_resp import *
 from t.utils.db_connect import *
 
+
 SYSTEM_NAME = "pgcache"  # Название системы (настраивается в скрипте)
-PROGRAM_VERSION = "0.3"        # Версия программы
-DB_STATE = "10000 записей, два текстовых столбца"  # Состояние БД
+PROGRAM_VERSION = "0.4"       # Версия программы
+DB_STATE = "10000 записей, два текстового столбца"  # Состояние БД
 THREADS_IN_SYSTEM = 4
 
 WORKERS = [1, 4, 8, 16]

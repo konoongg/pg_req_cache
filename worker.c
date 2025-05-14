@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -23,6 +24,7 @@
 #include "event.h"
 #include "io.h"
 #include "socket_wrapper.h"
+#include "stats.h"
 #include "worker.h"
 
 proc_status notify(connection* conn);
@@ -33,6 +35,7 @@ proc_status process_write(connection* conn);
 void finish_connection(connection* conn);
 void* start_worker(void* argv);
 
+_Atomic int worker_id = 0;
 extern config_redis config;
 thread_local wthread wthrd;
 
@@ -100,8 +103,10 @@ proc_status process_write(connection* conn) {
 
 // This event is processed solely to notify the loop that it needs to check the queue of active connections
 proc_status notify(connection* conn) {
-    //ereport(INFO, errmsg("notify: start"));
     not_status not_s = event_get_notify(conn->wthrd->not);
+
+    report_worker_notify(wthrd.id);
+    //ereport(INFO, errmsg("notify: start"));
     if (not_s == NOT_TA) {
         return ALIVE_PROC;
     }
@@ -283,6 +288,7 @@ void* start_worker(void* argv) {
 
     init_wthread(&wthrd);
     wthrd.l = init_loop();
+    wthrd.id = atomic_fetch_add(&worker_id, 1);
     wthrd.listen_socket = listen_socket;
 
     listen_conn = create_connection(listen_socket, &wthrd);

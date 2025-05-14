@@ -14,7 +14,7 @@
 
 typedef struct cache cache;
 
-cache_response* get_cache(key_info* key_i);
+data_version* get_cache(key_info* key_i);
 int delete_cache(key_info* key_i);
 void free_cache(void);
 void init_cache(void);

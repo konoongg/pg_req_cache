@@ -63,11 +63,13 @@ void init_cache(void) {
 * The function copies the data and returns a pointer to the copied data if the data is found.
 * If the data does not exist, it returns NULL.
 */
-cache_response* get_cache(key_info* key_i) {
+data_version* get_cache(key_info* key_i) {
     //ereport(INFO, errmsg("get_cache: start"));
+    data_version* result;
+
     find_ht_data find_table;
     find_ht_data find_value;
-
+    data_version* table_values_cur_v;
     table_data* table_values;
 
     find_table_key ft_key;
@@ -82,11 +84,12 @@ cache_response* get_cache(key_info* key_i) {
     find_table.hash_key = key_i->table_column;
     find_table.hash_key_size = key_i->table_column_size;
 
-    table_values = get_data(c->tables, &find_table);
-    if (table_values == NULL) {
-        //ereport(INFO, errmsg("do_get: %s no found", key_i->table_column));
+    table_values_cur_v = get_data(c->tables, &find_table);
+    if (table_values_cur_v == NULL) {
         return NULL;
     }
+    table_values = table_values_cur_v->value;
+
 
     fv_key.key = key_i->value;
     fv_key.key_size = key_i->value_size;
@@ -96,7 +99,9 @@ cache_response* get_cache(key_info* key_i) {
     find_value.hash_key = key_i->full_key;
     find_value.hash_key_size = key_i->full_size;
     //ereport(INFO, errmsg("do_get: value %s ", key_i->value));
-    return get_data(c->values, &find_value);
+    result = get_data(c->values, &find_value);
+    drop_version(table_values_cur_v);
+    return result;
 }
 
 /* A function to set new data by key.
@@ -110,6 +115,8 @@ void set_cache(key_info* key_i, cache_response* v, int value_size) {
     find_ht_data f_data;
     find_table_key f_table;
     find_value_key* f_value;
+
+    data_version* t_values_cur_v;
     table_data* t_values;
 
     f_table.key = key_i->table_column;
@@ -119,9 +126,9 @@ void set_cache(key_info* key_i, cache_response* v, int value_size) {
     f_data.find_key = &f_table;
 
     //ereport(INFO, errmsg("set_cache: key_i->table_column %s", key_i->table_column));
-    t_values = get_data(c->tables, &f_data);
+    t_values_cur_v = get_data(c->tables, &f_data);
 
-    if (t_values == NULL) {
+    if (t_values_cur_v == NULL) {
         create_ht_data new_table_data;
         table_data* td;
         find_table_key* f_table = wcalloc(sizeof(find_table_key));
@@ -141,9 +148,9 @@ void set_cache(key_info* key_i, cache_response* v, int value_size) {
         new_table_data.value_size = sizeof(table_data);
 
         set_data_if_not_exist(c->tables, &new_table_data);
-        t_values = get_data(c->tables, &f_data);
+        t_values_cur_v = get_data(c->tables, &f_data);
     }
-
+    t_values = t_values_cur_v->value;
     f_value = wcalloc(sizeof(find_value_key));
     f_value->table_num = t_values->uniq_num;
     f_value->key_size = key_i->value_size;
@@ -159,15 +166,19 @@ void set_cache(key_info* key_i, cache_response* v, int value_size) {
     new_value_data.value_size = value_size;
     //ereport(INFO, errmsg("set_cache: key_i->value %s", key_i->value));
     set_data(c->values, &new_value_data);
+    drop_version(t_values_cur_v);
 }
 
 int delete_cache(key_info* key_i) {
+    int res;
+
     find_ht_data find_table;
     find_ht_data find_value;
 
     find_table_key ft_key;
     find_value_key fv_key;
 
+    data_version* values_cur_v;
     table_data* values;
 
     ft_key.key = key_i->table_column;
@@ -177,11 +188,11 @@ int delete_cache(key_info* key_i) {
     find_table.hash_key = key_i->table_column;
     find_table.hash_key_size = key_i->table_column_size;
 
-    values = get_data(c->tables, &find_table);
-    if (values == NULL) {
+    values_cur_v = get_data(c->tables, &find_table);
+    if (values_cur_v == NULL) {
         return 0;
     }
-
+    values = values_cur_v->value;
     fv_key.key = key_i->value;
     fv_key.key_size = key_i->value_size;
     fv_key.table_num = values->uniq_num;
@@ -189,8 +200,10 @@ int delete_cache(key_info* key_i) {
     find_value.find_key = &fv_key;
     find_value.hash_key = key_i->full_key;
     find_value.hash_key_size = key_i->full_size;
+    res = delete_data(c->values, &find_value);
+    drop_version(values_cur_v);
 
-    return delete_data(c->values, &find_value);
+    return res;
 }
 
 void free_cache(void) {

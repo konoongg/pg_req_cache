@@ -12,10 +12,12 @@
 #include "connection.h"
 #include "hash.h"
 #include "ht_response_type.h"
+#include "ht.h"
 #include "io.h"
 #include "pg_req_creater.h"
 #include "query_cache_controller.h"
 #include "resp_creater.h"
+#include "stats.h"
 
 extern config_redis config;
 extern default_resp_answer def_resp;
@@ -24,6 +26,7 @@ command_dict* com_dict;
 process_result do_config(client_req* cl_req, answer* answ, connection* conn);
 process_result do_del(client_req* cl_req, answer* answ, connection* conn);
 process_result do_get(client_req* cl_req, answer* answ, connection* conn);
+process_result do_info(client_req* req, answer* answ, connection* conn);
 process_result do_ping(client_req* cl_req, answer* answ, connection* conn);
 process_result do_set(client_req* cl_req, answer* answ, connection* conn);
 void free_command(int hash);
@@ -35,8 +38,16 @@ redis_command commands[] = {
     {"get", do_get},
     {"set", do_set},
     {"ping", do_ping},
-    {"config", do_config}
+    {"config", do_config},
+    {"info", do_info}
 };
+
+process_result do_info(client_req* req, answer* answ, connection* conn) {
+    answ->answer_size = def_resp.pong.answer_size;
+    answ->answer = wcalloc(answ->answer_size  * sizeof(char));
+    memcpy(answ->answer, def_resp.pong.answer, answ->answer_size);
+    return DONE;
+}
 
 //In the case of receiving a PING command, send PONG back to the user.
 process_result do_ping(client_req* req, answer* answ, connection* conn) {
@@ -75,22 +86,28 @@ process_result do_get(client_req* cl_req, answer* answ, connection* conn) {
     char* key = cl_req->argv[1];
     int key_size = cl_req->argv_size[1];
     key_info* key_i = create_key_info(key, key_size);
+    cache_response* res;
     //ereport(INFO, errmsg("do_get: get"));
-    cache_response* res = get_cache(key_i);
-    //ereport(INFO, errmsg("do_get: finish get %p", res));
 
-    if (res == NULL) {
+    data_version* version = get_cache(key_i);
+    //ereport(INFO, errmsg("do_get: finish get %p", res));
+    if (version == NULL) {
+        char* req_to_db;
+
+        report_cache_miss();
         //ereport(INFO, errmsg("do_get: res == NULL table_size %d", key_i->table_size));
-        char* req_to_db = create_pg_get(key_i);
+        req_to_db = create_pg_get(key_i);
         move_from_active_to_wait(conn);
         register_command(key_i, key_i->table, key_i->table_size, req_to_db, conn, CACHE_UPDATE);
         //ereport(INFO, errmsg("do_get: DB_REQ"));
         return DB_REQ;
     }
 
+    res = version->value;
+
     destroy_key_info(key_i);
     create_array_resp(answ, res);
-    value_free_response(res);
+    drop_version(version);
     //ereport(INFO, errmsg("do_get: DONE"));
     return DONE;
 }
@@ -113,6 +130,7 @@ process_result do_set(client_req* cl_req, answer* answ, connection* conn) {
 
     key_info* key_i = create_key_info(key, key_size);
     res = create_response_by_resp(key_i->table, value, value_size);
+    req_to_db = create_pg_set(key_i, res->res);
 
     set_cache(key_i, res->res, res->size);
 
@@ -121,7 +139,6 @@ process_result do_set(client_req* cl_req, answer* answ, connection* conn) {
 
     memcpy(answ->answer, def_resp.ok.answer, answ->answer_size);
     move_from_active_to_wait(conn);
-    req_to_db = create_pg_set(key_i, res->res);
     register_command(NULL, key_i->table, key_i->table_size, req_to_db, conn, CACHE_SYNC);
     destroy_key_info(key_i);
     return DB_APPROVE;

@@ -58,10 +58,9 @@ void* copy_response(void* data) {
     return new_v;
 }
 
-void free_data_response(void (*value_free)(void* v), ht_data* data) {
+void free_data_response( ht_data* data) {
     find_value_key* find_key = data->find_key;
     free(find_key->key);
-    value_free(data->value);
     free(data->find_key);
     free(data);
 }
