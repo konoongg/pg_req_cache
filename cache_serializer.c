@@ -88,6 +88,8 @@ created_cache_respons* create_response_by_resp(char* table, char* value, int val
             start_pos = cur_pos + 1;
         }
     }
+    ccr->res->prepare_answer_valid = false;
+    ccr->res->updated = false;
     return ccr;
 }
 
@@ -165,6 +167,8 @@ created_cache_respons* create_response_by_pg(PGresult* result, char* table) {
             }
         }
     }
+    ccr->res->prepare_answer_valid = false;
+    ccr->res->updated = false;
     return ccr;
 }
 

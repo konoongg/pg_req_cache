@@ -20,6 +20,11 @@ struct cache_response {
     column** columns;
     int count_fields;
     int count_tuples;
+
+    char* prepare_answer;
+    int prepare_answer_size;
+    bool prepare_answer_valid;
+    bool updated;
 };
 
 struct created_cache_respons {

@@ -87,6 +87,7 @@ process_result do_get(client_req* cl_req, answer* answ, connection* conn) {
     int key_size = cl_req->argv_size[1];
     key_info* key_i = create_key_info(key, key_size);
     cache_response* res;
+    bool expeted_prepare = true;
     //ereport(INFO, errmsg("do_get: get"));
 
     data_version* version = get_cache(key_i);
@@ -106,7 +107,22 @@ process_result do_get(client_req* cl_req, answer* answ, connection* conn) {
     res = version->value;
 
     destroy_key_info(key_i);
-    create_array_resp(answ, res);
+    if (atomic_compare_exchange_strong(&(res->prepare_answer_valid), &expeted_prepare, true)) {
+        answ->answer_size = res->prepare_answer_size;
+        answ->answer = wcalloc(res->prepare_answer_size * sizeof(char));
+        memcpy(answ->answer, res->prepare_answer, answ->answer_size);
+    } else {
+        bool expected_not_update = false;
+        create_array_resp(answ, res);
+        if (atomic_compare_exchange_strong(&(res->updated), &expected_not_update, false)) {
+            res->prepare_answer_size = answ->answer_size;
+            res->prepare_answer = wcalloc(res->prepare_answer_size * sizeof(char));
+            memcpy(res->prepare_answer, answ->answer, res->prepare_answer_size);
+            atomic_store(&(res->prepare_answer_valid), true);
+            atomic_store(&(res->updated), false);
+        }
+    }
+
     drop_version(version);
     //ereport(INFO, errmsg("do_get: DONE"));
     return DONE;

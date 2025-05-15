@@ -8,13 +8,13 @@ from t.utils.db_connect import *
 
 
 SYSTEM_NAME = "pgcache"  # Название системы (настраивается в скрипте)
-PROGRAM_VERSION = "0.4"       # Версия программы
+PROGRAM_VERSION = "0.5"       # Версия программы
 DB_STATE = "10000 записей, два текстового столбца"  # Состояние БД
 THREADS_IN_SYSTEM = 4
 
 WORKERS = [1, 4, 8, 16]
 PIPELINE_COUNT = [1, 4, 8, 16]
-REQUEST_COUNT = [1000000]
+REQUEST_COUNT = [1000000, 10000000]
 CLIENT_COUNT = [100, 1000, 5000, 10000]
 PORT = [6379]
 
