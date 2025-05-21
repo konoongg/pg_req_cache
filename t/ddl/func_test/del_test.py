@@ -3,7 +3,7 @@ from psycopg2 import sql
 from t.fixtures.db_fixtures import *
 from t.utils.create_resp import *
 from t.utils.db_connect import *
-
+#хэлперы для операция и дял бд pydantic
 def test_simple_del_table_tt(create_and_drop_db, cleanup_schema):
     db_name = create_and_drop_db
     table_name, columns = create_table_text_text(db_name)

@@ -1,7 +1,7 @@
-
 #include <assert.h>
 #include <pthread.h>
 #include <stdatomic.h>
+#include <sys/time.h>
 
 #include "postgres.h"
 #include "utils/elog.h"
@@ -12,11 +12,15 @@
 #define write_lock false
 #define read_lock true
 
-ht_basket* get_basket(hash_table* ht, char* key, int key_size);
-ht_data* find_data_in_basket(hash_table* ht, ht_basket* basket, void* find_key);
-void basket_lock(ht_basket* basket, bool is_read_lock);
-void basket_unlock(ht_basket* basket);
-void free_data_from_ht(hash_table* ht, ht_basket* basket, ht_data* cur_data, ht_data* prev_data);
+#define WITHOUT_TLL false
+#define WITH_TLL true
+
+static ht_basket* get_basket(hash_table* ht, char* key, int key_size);
+static ht_data* find_data_in_basket(hash_table* ht, ht_basket* basket, void* find_key, bool take_tll);
+static uint64_t get_current_ms();
+static void basket_lock(ht_basket* basket, bool is_read_lock);
+static void basket_unlock(ht_basket* basket);
+static void free_data_from_ht(hash_table* ht, ht_basket* basket, ht_data* cur_data, ht_data* prev_data);
 
 void basket_lock(ht_basket* basket, bool is_read_lock) {
     if (is_read_lock) {
@@ -73,15 +77,28 @@ ht_basket* get_basket(hash_table* ht, char* key, int key_size) {
     return &(ht->baskets[hash]);
 }
 
+static uint64_t get_current_ms() {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (uint64_t)(tv.tv_sec) * 1000 + (uint64_t)(tv.tv_usec) / 1000;
+}
+
 /*
 * The function checks whether the specified bucket contains data with the provided key.
 * If the data exists, a reference to it is returned; otherwise, NULL is returned.
 */
-ht_data* find_data_in_basket(hash_table* ht, ht_basket* basket, void* find_key) {
+ht_data* find_data_in_basket(hash_table* ht, ht_basket* basket, void* find_key, bool take_tll) {
     ht_data* data;
     data = basket->first;
     while (data != NULL) {
         if (ht->cmp_key(data->find_key, find_key)) {
+            if (data->expire_ms > 0) {
+                size_t current_ms = get_current_ms();
+                size_t elapsed_ms = current_ms - (size_t)(data->last_time * 1000);
+                if (elapsed_ms >= data->expire_ms && take_tll) {
+                    return NULL;
+                }
+            }
             return data;
         }
         data = data->next;
@@ -204,14 +221,13 @@ void drop_version(data_version* version) {
 
 data_version* get_data(hash_table* ht, find_ht_data* find) {
 
-    ////ereport(INFO, errmsg("get_data: start"));
     ht_basket* basket;
     ht_data* data;
     void* result = NULL;
 
     basket = get_basket(ht, find->hash_key, find->hash_key_size);
     basket_lock(basket, read_lock);
-    data = find_data_in_basket(ht, basket, find->find_key);
+    data = find_data_in_basket(ht, basket, find->find_key, WITH_TLL);
 
     if (data != NULL) {
         result = data->value_cur;
@@ -234,7 +250,7 @@ void set_data(hash_table* ht, create_ht_data* new_data) {
 
     basket_lock(basket, write_lock);
 
-    data = find_data_in_basket(ht, basket, new_data->find_key);
+    data = find_data_in_basket(ht, basket, new_data->find_key, WITHOUT_TLL);
     if (data == NULL) {
         if (basket->first == NULL) {
             data = basket->first = basket->last = wcalloc(sizeof(ht_data));
@@ -261,6 +277,7 @@ void set_data(hash_table* ht, create_ht_data* new_data) {
     data->value_cur->value = new_data->value;
     data->value_cur->next = NULL;
     data->value_cur->usage_counter = 0;
+    data->expire_ms = new_data->expire_ms;
     data_size = new_data->find_key_size + new_data->value_size + sizeof(ht_data);
 
     atomic_fetch_add(&(ht->cur_ht_size), data_size);
@@ -282,7 +299,7 @@ void set_data_if_not_exist(hash_table* ht, create_ht_data* new_data) {
 
     basket_lock(basket, write_lock);
 
-    data = find_data_in_basket(ht, basket, new_data->find_key);
+    data = find_data_in_basket(ht, basket, new_data->find_key, WITHOUT_TLL);
     if (data == NULL) {
         if (basket->first == NULL) {
             data = basket->first = basket->last = wcalloc(sizeof(ht_data));

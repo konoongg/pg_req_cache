@@ -25,6 +25,7 @@ struct cache_response {
     int prepare_answer_size;
     bool prepare_answer_valid;
     bool updated;
+    
 };
 
 struct created_cache_respons {

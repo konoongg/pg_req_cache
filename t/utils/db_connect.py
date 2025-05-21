@@ -95,4 +95,5 @@ def create_socket():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.connect(("localhost", 6379))
+    sock.settimeout(1.0)
     return sock

@@ -36,6 +36,7 @@ struct ht_data {
     ht_data* next;
     void* find_key;
     time_t last_time;
+    size_t expire_ms;
     size_t ht_data_size;
 };
 
@@ -59,6 +60,8 @@ struct create_ht_data {
     char* hash_key;
     void* find_key;
     void* value;
+
+    size_t expire_ms;
 };
 
 struct find_ht_data {

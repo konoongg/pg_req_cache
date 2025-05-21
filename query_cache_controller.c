@@ -155,7 +155,7 @@ proc_status process_read_db(connection* conn) {
 
         event_notify(cmd->conn->wthrd->not);
         if (cmd->reason == CACHE_UPDATE) {
-            set_cache(cmd->key, res->res, res->size );
+            set_cache(cmd->key, res->res, res->size, 0);
         }
         free_db_command(cmd);
         stop_event(dbw.wthrd->l, conn->r_data->handle);

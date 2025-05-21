@@ -27,6 +27,8 @@ struct key_info {
 
     char* value;
     int value_size;
+
+    bool direct;
 };
 
 #endif

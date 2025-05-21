@@ -174,11 +174,31 @@ created_cache_respons* create_response_by_pg(PGresult* result, char* table) {
 
 key_info* create_key_info(char* key, int key_size) {
     key_info* key_i = wcalloc(sizeof(key_info));
+
     char* dot_position_s;
     char* dot_position_f;
 
+    char* key_start = key;
+    int flag_size = 0;
+    key_i->direct = false;
 
-    dot_position_f = strchr(key, '.');
+    if (key[0] == '[') {
+        for (int i = 0; i < key_size; ++i) {
+            if (key[i] == ']') {
+                key_start = key + i + 1;
+                flag_size = i + 1;
+            }
+            switch (key[i]) {
+                case 'D':
+                    key[i] = 'N';
+                    key_i->direct = true;
+                    break;
+            }
+        }
+    }
+
+
+    dot_position_f = strchr(key_start, '.');
     if (dot_position_f == NULL) {
         return NULL;
     }
@@ -188,17 +208,17 @@ key_info* create_key_info(char* key, int key_size) {
         return NULL;
     }
 
-    key_i->full_key = key;
-    key_i->full_size = key_size;
+    key_i->full_key = key_start;
+    key_i->full_size = key_size - flag_size;
 
-    key_i->table_size = dot_position_f - key;
+    key_i->table_size = dot_position_f - key_start;
     key_i->table = wcalloc((key_i->table_size + 1) * sizeof(char));
-    memcpy(key_i->table, key, key_i->table_size);
+    memcpy(key_i->table, key_start, key_i->table_size);
     key_i->table[key_i->table_size] = '\0';
 
-    key_i->table_column_size = dot_position_s - key;
+    key_i->table_column_size = dot_position_s - key_start;
     key_i->table_column = wcalloc((key_i->table_column_size + 1) * sizeof(char));
-    memcpy(key_i->table_column, key, key_i->table_column_size);
+    memcpy(key_i->table_column, key_start, key_i->table_column_size);
     key_i->table_column[key_i->table_column_size] = '\0';
 
     key_i->column_size = dot_position_s - dot_position_f - 1;

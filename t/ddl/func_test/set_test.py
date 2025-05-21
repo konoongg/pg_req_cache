@@ -79,7 +79,7 @@ def test_simple_double_set_table_tt(create_and_drop_db, cleanup_schema):
 
     response = sock.recv(1024)
     assert response == answer, f"Ожидался ответ {answer}, но получен: {response}"
-    
+
     query = sql.SQL("SELECT * FROM {} WHERE {} = %s AND {} = %s").format(
         sql.Identifier(table_name),
         sql.Identifier(columns[0]),

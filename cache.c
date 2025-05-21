@@ -109,7 +109,7 @@ data_version* get_cache(key_info* key_i) {
 * First, it checks whether such data already exists.
 * If it does, the data is updated; if not, new data is added.
 */
-void set_cache(key_info* key_i, cache_response* v, int value_size) {
+void set_cache(key_info* key_i, cache_response* v, int value_size, int ttl_ms) {
     //ereport(INFO, errmsg("set_cache: START"));
     create_ht_data new_value_data;
     find_ht_data f_data;
@@ -141,11 +141,13 @@ void set_cache(key_info* key_i, cache_response* v, int value_size) {
         new_table_data.find_key_size = sizeof(find_table_key) + f_table->key_size;
         new_table_data.hash_key_size = key_i->table_column_size;
         new_table_data.hash_key = key_i->table_column;
+        new_table_data.expire_ms = 0;
 
         td = wcalloc(sizeof(table_data));
         td->uniq_num = atomic_fetch_add(&(c->table_max_num), 1);
         new_table_data.value = td;
         new_table_data.value_size = sizeof(table_data);
+        new_table_data.expire_ms = ttl_ms;
 
         set_data_if_not_exist(c->tables, &new_table_data);
         t_values_cur_v = get_data(c->tables, &f_data);

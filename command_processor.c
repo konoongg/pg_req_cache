@@ -82,25 +82,24 @@ process_result do_config(client_req* req, answer* answ, connection* conn) {
 * and return a code indicating that the client needs to wait for the data to be retrieved.
 */
 process_result do_get(client_req* cl_req, answer* answ, connection* conn) {
-    //ereport(INFO, errmsg("do_get: start"));
     char* key = cl_req->argv[1];
     int key_size = cl_req->argv_size[1];
     key_info* key_i = create_key_info(key, key_size);
     cache_response* res;
     bool expeted_prepare = true;
-    //ereport(INFO, errmsg("do_get: get"));
+    data_version* version = NULL;
 
-    data_version* version = get_cache(key_i);
-    //ereport(INFO, errmsg("do_get: finish get %p", res));
+    if (!key_i->direct) {
+        version = get_cache(key_i);
+    }
+
     if (version == NULL) {
         char* req_to_db;
 
         report_cache_miss();
-        //ereport(INFO, errmsg("do_get: res == NULL table_size %d", key_i->table_size));
         req_to_db = create_pg_get(key_i);
         move_from_active_to_wait(conn);
         register_command(key_i, key_i->table, key_i->table_size, req_to_db, conn, CACHE_UPDATE);
-        //ereport(INFO, errmsg("do_get: DB_REQ"));
         return DB_REQ;
     }
 
@@ -143,12 +142,35 @@ process_result do_set(client_req* cl_req, answer* answ, connection* conn) {
     int value_size = cl_req->argv_size[2];
     created_cache_respons* res;
     char* req_to_db;
+    size_t ttl_ms = 0;
+    key_info* key_i;
 
-    key_info* key_i = create_key_info(key, key_size);
+    for (int i = 3; i < cl_req->argc; ++i) {
+        if (strncmp(cl_req->argv[i], "EX" , 2) == 0 && i != cl_req->argc - 1) {
+            char *endptr;
+            ttl_ms = strtoll(cl_req->argv[i + 1], &endptr, 10);
+            if (*endptr != '\0' || ttl_ms <= 0) {
+                return PROCESS_ERR;
+            }
+            ttl_ms *= 1000;
+            ++i;
+        } else if (strncmp(cl_req->argv[i], "PX" , 2) == 0 && i != cl_req->argc - 1) {
+            char *endptr;
+            ttl_ms = strtoll(cl_req->argv[i + 1], &endptr, 10);
+            if (*endptr != '\0' || ttl_ms <= 0) {
+                return PROCESS_ERR;
+            }
+            ++i;
+        }
+    }
+
+    key_i = create_key_info(key, key_size);
     res = create_response_by_resp(key_i->table, value, value_size);
     req_to_db = create_pg_set(key_i, res->res);
 
-    set_cache(key_i, res->res, res->size);
+
+
+    set_cache(key_i, res->res, res->size, ttl_ms);
 
     answ->answer_size = def_resp.ok.answer_size;
     answ->answer = wcalloc(answ->answer_size  * sizeof(char));
