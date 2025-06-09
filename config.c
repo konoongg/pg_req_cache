@@ -17,7 +17,7 @@ void defalt_setting_init(void) {
 
     config.c_conf.count_basket_values = 100003; // cache basket
     config.c_conf.count_basket_tables = 101; // cache basket
-    config.c_conf.ttl_s = 0; // cache ttl
+    config.c_conf.ttl_s = 1; // cache ttl
     config.c_conf.max_storage_size = (size_t)1024 * 1024 * 1024 * 1024;
     config.c_conf.seed = 101; // hash seed
 

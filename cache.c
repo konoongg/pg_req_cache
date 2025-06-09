@@ -128,7 +128,7 @@ void set_cache(key_info* key_i, cache_response* v, int value_size, int ttl_ms) {
     //ereport(INFO, errmsg("set_cache: key_i->table_column %s", key_i->table_column));
     t_values_cur_v = get_data(c->tables, &f_data);
 
-    if (t_values_cur_v == NULL) {
+    while (t_values_cur_v == NULL) {
         create_ht_data new_table_data;
         table_data* td;
         find_table_key* f_table = wcalloc(sizeof(find_table_key));
@@ -166,7 +166,6 @@ void set_cache(key_info* key_i, cache_response* v, int value_size, int ttl_ms) {
 
     new_value_data.value = v;
     new_value_data.value_size = value_size;
-    //ereport(INFO, errmsg("set_cache: key_i->value %s", key_i->value));
     set_data(c->values, &new_value_data);
     drop_version(t_values_cur_v);
 }
@@ -214,3 +213,10 @@ void free_cache(void) {
     free(c);
 }
 
+size_t get_cur_cache_size(void) {
+    return get_cur_size(c->values);
+}
+
+void cache_clean(int del_time_s) {
+    ht_clean(c->values, del_time_s);
+}

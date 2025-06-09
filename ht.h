@@ -13,12 +13,13 @@ typedef struct hash_table hash_table;
 typedef struct ht_basket ht_basket;
 typedef struct ht_data ht_data;
 
-hash_table* create_ht(create_ht_info* info);
 data_version* get_data(hash_table* ht, find_ht_data* find);
+hash_table* create_ht(create_ht_info* info);
 int delete_data(hash_table* ht, find_ht_data* find);
+size_t get_cur_size(hash_table* ht);
 void destroy_ht(hash_table* ht);
 void drop_version(data_version* version);
-void ht_timer_delete(hash_table* ht, time_t check_time);
+void ht_clean(hash_table* ht, int recomendate_ttl_s);
 void set_data_if_not_exist(hash_table* ht, create_ht_data* new_data);
 void set_data(hash_table* ht, create_ht_data* new_data);
 
@@ -83,6 +84,7 @@ struct hash_table {
     void (*value_free)(void* value);
     void* (*copy)(void* value);
 
+    bool not_ttl;
     size_t max_ht_size;
     _Atomic size_t cur_ht_size;
     ht_basket* baskets;

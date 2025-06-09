@@ -5,6 +5,7 @@ MODULE_big = pg_redis_proxy
 OBJS = \
 	$(WIN32RES) \
 	alloc.o \
+	cache_gc.o \
 	cache_serializer.o \
 	cache.o \
 	command_processor.o \

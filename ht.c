@@ -7,6 +7,7 @@
 #include "utils/elog.h"
 
 #include "alloc.h"
+#include "config.h"
 #include "ht.h"
 
 #define write_lock false
@@ -15,12 +16,18 @@
 #define WITHOUT_TLL false
 #define WITH_TLL true
 
+
+extern config_redis config;
+
+bool need_delete_all_version (ht_data* cur_data, int recomendate_ttl_s);
 static ht_basket* get_basket(hash_table* ht, char* key, int key_size);
 static ht_data* find_data_in_basket(hash_table* ht, ht_basket* basket, void* find_key, bool take_tll);
 static uint64_t get_current_ms();
 static void basket_lock(ht_basket* basket, bool is_read_lock);
 static void basket_unlock(ht_basket* basket);
 static void free_data_from_ht(hash_table* ht, ht_basket* basket, ht_data* cur_data, ht_data* prev_data);
+void free_data(hash_table* ht, ht_basket* basket, ht_data* cur_data, ht_data* prev_data);
+void free_version(hash_table* ht, ht_data* cur_data, data_version* version, data_version* prev_version);
 
 void basket_lock(ht_basket* basket, bool is_read_lock) {
     if (is_read_lock) {
@@ -46,29 +53,6 @@ void basket_unlock(ht_basket* basket) {
     }
 }
 
-void ht_timer_delete(hash_table* ht, time_t check_time) {
-    time_t cur_time = time(NULL);
-    for (int i = 0; i < ht->count_baskets; ++i) {
-        ht_basket* basket = &(ht->baskets[i]);
-        ht_data* cur_data;
-        ht_data* prev_data;
-
-        basket_lock(basket, write_lock);
-
-        cur_data = basket->first;
-        prev_data = NULL;
-        while (cur_data != NULL) {
-            if (cur_time - cur_data->last_time >= check_time)  {
-                cur_data->value_cur->dirty = true;
-                free_data_from_ht(ht, basket, cur_data, prev_data);
-            } else {
-                prev_data = cur_data;
-            }
-            cur_data = cur_data->next;
-        }
-        basket_unlock(basket);
-    }
-}
 
 //A function to retrieve the corresponding ht bucket based on a string.
 ht_basket* get_basket(hash_table* ht, char* key, int key_size) {
@@ -92,10 +76,16 @@ ht_data* find_data_in_basket(hash_table* ht, ht_basket* basket, void* find_key, 
     data = basket->first;
     while (data != NULL) {
         if (ht->cmp_key(data->find_key, find_key)) {
-            if (data->expire_ms > 0) {
+            if (data->expire_ms > 0 && take_tll) {
                 size_t current_ms = get_current_ms();
                 size_t elapsed_ms = current_ms - (size_t)(data->last_time * 1000);
-                if (elapsed_ms >= data->expire_ms && take_tll) {
+                if (elapsed_ms >= data->expire_ms ) {
+                    return NULL;
+                }
+            } else if (data->expire_ms == 0 && ht->ttl_s  > 0 && take_tll) {
+                size_t current_ms = get_current_ms();
+                size_t elapsed_ms = current_ms - (size_t)(data->last_time * 1000);
+                if (elapsed_ms >= ht->ttl_s  * 1000 ) {
                     return NULL;
                 }
             }
@@ -106,7 +96,35 @@ ht_data* find_data_in_basket(hash_table* ht, ht_basket* basket, void* find_key, 
     return NULL;
 }
 
-//todo выделить список в отдельный инстанс и реалзиовать для него методы удаления и добавления
+void free_version(hash_table* ht, ht_data* cur_data, data_version* version, data_version* prev_version) {
+    ht->value_free(version->value);
+    if (version == cur_data->value_first) {
+        cur_data->value_first = version->next;
+    } else {
+        prev_version->next = version->next;
+    }
+
+    if (version->next == NULL) {
+        cur_data->value_cur = prev_version;
+    }
+    free(version);
+}
+
+void free_data(hash_table* ht, ht_basket* basket, ht_data* cur_data, ht_data* prev_data) {
+    if (cur_data == basket->first) {
+        basket->first = cur_data->next;
+    } else {
+        prev_data->next = cur_data->next;
+    }
+
+    if (cur_data->next == NULL) {
+        basket->last = prev_data;
+    }
+
+    atomic_fetch_sub(&(ht->cur_ht_size), cur_data->ht_data_size);
+    ht->free_data(cur_data);
+}
+
 void free_data_from_ht(hash_table* ht, ht_basket* basket, ht_data* cur_data, ht_data* prev_data) {
     bool all_del = true;
     data_version* version = cur_data->value_first;
@@ -115,21 +133,9 @@ void free_data_from_ht(hash_table* ht, ht_basket* basket, ht_data* cur_data, ht_
     while (version != NULL) {
         data_version* next_version = version->next;
         if (version->usage_counter == 0) {
-            ht->value_free(version->value);
-
-            if (version == cur_data->value_first) {
-                cur_data->value_first = version->next;
-            } else {
-                prev_version->next = version->next;
-            }
-
-            if (version->next == NULL) {
-                cur_data->value_cur = prev_version;
-            }
-
-
-            free(version);
+            free_version(ht, cur_data, version, prev_version);
         } else {
+            version->dirty = true;
             prev_version = version;
             all_del = false;
         }
@@ -137,18 +143,7 @@ void free_data_from_ht(hash_table* ht, ht_basket* basket, ht_data* cur_data, ht_
     }
 
     if (all_del) {
-        if (cur_data == basket->first) {
-            basket->first = cur_data->next;
-        } else {
-            prev_data->next = cur_data->next;
-        }
-
-        if (cur_data->next == NULL) {
-            basket->last = prev_data;
-        }
-
-        atomic_fetch_sub(&(ht->cur_ht_size), cur_data->ht_data_size);
-        ht->free_data(cur_data);
+        free_data(ht, basket, cur_data, prev_data);
     }
 }
 
@@ -235,8 +230,6 @@ data_version* get_data(hash_table* ht, find_ht_data* find) {
     }
 
     basket_unlock(basket);
-
-    ////ereport(INFO, errmsg("get_data: key: %p result %p", find->find_key, result));
     return result;
 }
 
@@ -357,4 +350,72 @@ int delete_data(hash_table* ht, find_ht_data* find) {
     basket_unlock(basket);
 
     return 1;
+}
+
+size_t get_cur_size(hash_table* ht) {
+    return atomic_load(&(ht->cur_ht_size));
+}
+
+bool need_delete_all_version (ht_data* cur_data, int recomendate_ttl_s) {
+    if (cur_data->expire_ms > 0) {
+        size_t current_ms = get_current_ms();
+        size_t elapsed_ms = current_ms - (size_t)(cur_data->last_time * 1000);
+        if (elapsed_ms >= cur_data->expire_ms) {
+            return true;
+        }
+    } else if (cur_data->expire_ms == 0 && recomendate_ttl_s > 0) {
+        size_t current_ms = get_current_ms();
+        size_t elapsed_ms = current_ms - (size_t)(cur_data->last_time * 1000);
+        if (elapsed_ms >= recomendate_ttl_s * 1000) {
+           return true;
+        }
+    }
+    return false;
+}
+
+
+void ht_clean(hash_table* ht, int recomendate_ttl_s) {
+    for (int i = 0 ; i < ht->count_baskets; ++i) {
+        ht_basket* basket = &(ht->baskets[i]);
+        ht_data* cur_data;
+        ht_data* prev_data;
+
+        basket_lock(basket, write_lock);
+
+        cur_data = basket->first;
+        prev_data = NULL;
+        while (cur_data != NULL) {
+            bool all_del = true;
+            bool delete_all_version = false;
+            data_version* version = cur_data->value_first;
+            data_version* prev_version = NULL;
+
+            delete_all_version = need_delete_all_version(cur_data, recomendate_ttl_s);
+
+            while (version != NULL) {
+                data_version* next_version = version->next;
+                if (version->usage_counter == 0) {
+                    if (version->dirty || delete_all_version) {
+                        free_version(ht, cur_data, version, prev_version);
+                    }
+
+                } else {
+                    if (delete_all_version) {
+                        version->dirty = true;
+                    }
+                    prev_version = version;
+                    all_del = false;
+                }
+                version = next_version;
+            }
+
+            if (all_del) {
+                free_data(ht, basket, cur_data, prev_data);
+            }
+
+            prev_data = cur_data;
+            cur_data = cur_data->next;
+        }
+        basket_unlock(basket);
+    }
 }

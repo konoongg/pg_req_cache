@@ -10,7 +10,7 @@ void init_cache_gc(void);
 
 struct cache_gc {
     wthread* gc_wthrd;
-    pthread_mutex_t* not_lock;
+    pthread_mutex_t* not_lock; // notify lock
 };
 
 #endif
