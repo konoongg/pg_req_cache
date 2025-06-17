@@ -25,7 +25,9 @@ OBJS = \
 	resp_creater.o \
 	socket_wrapper.o \
 	stats.o \
+	rpmalloc/rpmalloc.o \
 	worker.o
+
 
 
 EXTENSION = pg_redis_proxy

@@ -107,7 +107,7 @@ void free_version(hash_table* ht, ht_data* cur_data, data_version* version, data
     if (version->next == NULL) {
         cur_data->value_cur = prev_version;
     }
-    free(version);
+    shfree(version);
 }
 
 void free_data(hash_table* ht, ht_basket* basket, ht_data* cur_data, ht_data* prev_data) {
@@ -148,10 +148,11 @@ void free_data_from_ht(hash_table* ht, ht_basket* basket, ht_data* cur_data, ht_
 }
 
 hash_table* create_ht(create_ht_info* info) {
-    hash_table* ht = wcalloc(sizeof(hash_table));
+    hash_table* ht = shalloc(sizeof(hash_table));
+    ereport(INFO, errmsg("create_ht: first shalloc suc"));
 
     ht->count_baskets = info->count_basket;
-    ht->baskets = wcalloc(ht->count_baskets * sizeof(ht_basket));
+    ht->baskets = shalloc(ht->count_baskets * sizeof(ht_basket));
     ht->ttl_s = info->ttl_s;
     ht->max_ht_size = info->max_ht_size;
 
@@ -166,7 +167,7 @@ hash_table* create_ht(create_ht_info* info) {
     for (int i = 0; i < ht->count_baskets ; ++i) {
         int err;
 
-        (ht->baskets[i]).lock = wcalloc(sizeof(pthread_rwlock_t));
+        (ht->baskets[i]).lock = shalloc(sizeof(pthread_rwlock_t));
         err = pthread_rwlock_init((ht->baskets[i]).lock, NULL);
         if (err != 0) {
             ////ereport(INFO, errmsg("create_ht: pthread_rwlock_init %s", strerror(err)));
@@ -190,7 +191,7 @@ void destroy_ht(hash_table* ht) {
                 data_version* next_version = version->next;
                 assert(version->usage_counter == 0);
                 ht->value_free(version->value);
-                free(version);
+                shfree(version);
                 version = next_version;
             }
             ht->free_data(cur_data);
@@ -202,10 +203,10 @@ void destroy_ht(hash_table* ht) {
             ////ereport(INFO, errmsg("free_cache: pthread_rwlock_destroy %s", strerror(err)));
             abort();
         }
-        free((void*) basket->lock);
+        shfree((void*) basket->lock);
     }
-    free(ht->baskets);
-    free(ht);
+    shfree(ht->baskets);
+    shfree(ht);
 }
 
 
@@ -246,14 +247,14 @@ void set_data(hash_table* ht, create_ht_data* new_data) {
     data = find_data_in_basket(ht, basket, new_data->find_key, WITHOUT_TLL);
     if (data == NULL) {
         if (basket->first == NULL) {
-            data = basket->first = basket->last = wcalloc(sizeof(ht_data));
+            data = basket->first = basket->last = shalloc(sizeof(ht_data));
         } else {
-            basket->last->next = wcalloc(sizeof(ht_data));
+            basket->last->next = shalloc(sizeof(ht_data));
             data = basket->last = basket->last->next;
         }
         data->next = NULL;
         data->find_key = new_data->find_key;
-        data->value_first = data->value_cur = wcalloc(sizeof(data_version));
+        data->value_first = data->value_cur = shalloc(sizeof(data_version));
         data->value_cur->dirty = false;
     } else {
         if (data->value_cur->usage_counter == 0) {
@@ -262,7 +263,7 @@ void set_data(hash_table* ht, create_ht_data* new_data) {
             data->value_cur->dirty = true;
         } else {
             data->value_cur->dirty = true;
-            data->value_cur->next = wcalloc(sizeof(data_version));
+            data->value_cur->next = shalloc(sizeof(data_version));
             data->value_cur = data->value_cur->next;
         }
     }
@@ -295,15 +296,15 @@ void set_data_if_not_exist(hash_table* ht, create_ht_data* new_data) {
     data = find_data_in_basket(ht, basket, new_data->find_key, WITHOUT_TLL);
     if (data == NULL) {
         if (basket->first == NULL) {
-            data = basket->first = basket->last = wcalloc(sizeof(ht_data));
+            data = basket->first = basket->last = shalloc(sizeof(ht_data));
         } else {
-            basket->last->next = wcalloc(sizeof(ht_data));
+            basket->last->next = shalloc(sizeof(ht_data));
             data = basket->last = basket->last->next;
         }
         data->next = NULL;
         data->find_key = new_data->find_key;
 
-        data->value_first = data->value_cur = wcalloc(sizeof(data_version));
+        data->value_first = data->value_cur = shalloc(sizeof(data_version));
         data->value_cur->dirty = false;
         data->value_cur->value = new_data->value;
         data->value_cur->next = NULL;

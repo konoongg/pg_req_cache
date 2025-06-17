@@ -26,21 +26,21 @@ void* copy_response(void* data) {
     int count_tuples = v->count_tuples;
     int count_fields = v->count_fields;
 
-    cache_response* new_v = wcalloc(sizeof(cache_response));
+    cache_response* new_v = shalloc(sizeof(cache_response));
     new_v->count_tuples = count_tuples;
     new_v->count_fields = count_fields;
-    new_v->values = wcalloc(count_tuples * sizeof(cache_attr*));
-    new_v->columns = wcalloc(count_fields * sizeof(column*));
+    new_v->values = shalloc(count_tuples * sizeof(cache_attr*));
+    new_v->columns = shalloc(count_fields * sizeof(column*));
 
     for (int i = 0; i < count_fields; ++i) {
         new_v->columns[i] = v->columns[i];
     }
 
     for (int i = 0; i < count_tuples; ++i) {
-        new_v->values[i] = wcalloc(count_fields * sizeof(cache_attr));
+        new_v->values[i] = shalloc(count_fields * sizeof(cache_attr));
         for (int j = 0; j < count_fields; ++j ) {
             cache_attr* a = &(new_v->values[i][j]);
-            a->data = wcalloc(sizeof(db_data));
+            a->data = shalloc(sizeof(db_data));
 
             switch (new_v->columns[j]->type) {
                 case INT:
@@ -48,7 +48,7 @@ void* copy_response(void* data) {
                     break;
                 case STRING:
                     int str_size = v->values[i][j].data->str.size;
-                    a->data->str.str = wcalloc(str_size * sizeof(char));
+                    a->data->str.str = shalloc(str_size * sizeof(char));
                     memcpy(a->data->str.str, v->values[i][j].data->str.str, str_size);
                     a->data->str.size = str_size;
                     break;
@@ -60,9 +60,9 @@ void* copy_response(void* data) {
 
 void free_data_response( ht_data* data) {
     find_value_key* find_key = data->find_key;
-    free(find_key->key);
-    free(data->find_key);
-    free(data);
+    shfree(find_key->key);
+    shfree(data->find_key);
+    shfree(data);
 }
 
 void value_free_response(void* data) {
@@ -72,11 +72,11 @@ void value_free_response(void* data) {
 
      for (int i = 0; i < count_tuples; ++i) {
         for (int j = 0; j < count_field; ++j) {
-            free(v->values[i][j].data);
+            shfree(v->values[i][j].data);
         }
-        free(v->values[i]);
+        shfree(v->values[i]);
     }
-    free(v->columns);
-    free(v->values);
-    free(v);
+    shfree(v->columns);
+    shfree(v->values);
+    shfree(v);
 }
