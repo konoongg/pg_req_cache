@@ -228,7 +228,7 @@ void init_meta_data(void) {
             } else if (strncmp(type, "integer", 7) == 0) {
                 t->columns[c].type = INT;
             } else {
-                ereport(INFO, errmsg("init_meta_data: undefined type: %s", type));
+                ereport(INFO, errmsg("init_meta_data: undefined type: %s  column_name: %s table %s", type, column_name, t->name));
                 PQclear(res);
                 PQfinish(conn);
                 abort();

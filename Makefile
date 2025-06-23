@@ -18,6 +18,8 @@ OBJS = \
 	ht_response_type.o \
 	ht_table_type.o \
 	ht.o \
+	invalidation/invalid.o \
+	invalidation/wal_reader.o \
 	io.o \
 	pg_req_creater.o \
 	query_cache_controller.o \

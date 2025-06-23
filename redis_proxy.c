@@ -11,7 +11,7 @@
 #include "cache.h"
 #include "command_processor.h"
 #include "config.h"
-#include "invalid.h"
+#include "invalidation/invalid.h"
 #include "query_cache_controller.h"
 #include "resp_creater.h"
 #include "socket_wrapper.h"
@@ -70,6 +70,9 @@ void proxy_start_work(Datum main_arg) {
 
     init_cache_gc();
     ereport(INFO, errmsg("finish init cache gc"));
+
+    init_invalidator();
+    ereport(INFO, errmsg("finish init wal reader"));
 
     ereport(INFO, errmsg("start init db worker"));
     init_db_worker();
