@@ -9,10 +9,8 @@
 #include "data_parser.h"
 #include "io.h"
 
-void replace_part_of_buffer(io_read* data, int cur_buffer_index);
-
 // saves data to a buffer if more than one packet has been written off
-void replace_part_of_buffer(io_read* data, int cur_buffer_index) {
+static void replace_part_of_buffer(io_read* data, int cur_buffer_index) {
     memmove(data->read_buffer, data->read_buffer + cur_buffer_index, data->cur_buffer_size - cur_buffer_index);
     data->cur_buffer_size -=  cur_buffer_index;
 }

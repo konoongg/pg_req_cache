@@ -5,20 +5,24 @@
 #include <time.h>
 #include <stdatomic.h>
 
-typedef struct create_ht_info create_ht_info;
+typedef enum invalidate_mode invalidate_mode;
 typedef struct create_ht_data create_ht_data;
+typedef struct create_ht_info create_ht_info;
 typedef struct data_version data_version;
 typedef struct find_ht_data find_ht_data;
 typedef struct hash_table hash_table;
 typedef struct ht_basket ht_basket;
 typedef struct ht_data ht_data;
+typedef struct invalid_ht_data invalid_ht_data;
 
-hash_table* create_ht(create_ht_info* info);
 data_version* get_data(hash_table* ht, find_ht_data* find);
+hash_table* create_ht(create_ht_info* info);
 int delete_data(hash_table* ht, find_ht_data* find);
+size_t get_cur_size(hash_table* ht);
 void destroy_ht(hash_table* ht);
 void drop_version(data_version* version);
-void ht_timer_delete(hash_table* ht, time_t check_time);
+void ht_clean(hash_table* ht, int recomendate_ttl_s);
+void invalidate_data(hash_table* ht, invalid_ht_data* inv);
 void set_data_if_not_exist(hash_table* ht, create_ht_data* new_data);
 void set_data(hash_table* ht, create_ht_data* new_data);
 
@@ -36,7 +40,9 @@ struct ht_data {
     ht_data* next;
     void* find_key;
     time_t last_time;
+    size_t expire_ms;
     size_t ht_data_size;
+    int invalid_save;
 };
 
 struct create_ht_info {
@@ -51,6 +57,16 @@ struct create_ht_info {
     int ttl_s;
 };
 
+enum invalidate_mode {
+    INV_UPDATE,
+    INV_DELETE,
+};
+
+struct invalid_ht_data {
+    create_ht_data* create;
+    invalidate_mode mode;
+};
+
 struct create_ht_data {
     int value_size;
     int find_key_size;
@@ -59,6 +75,8 @@ struct create_ht_data {
     char* hash_key;
     void* find_key;
     void* value;
+
+    size_t expire_ms;
 };
 
 struct find_ht_data {
@@ -80,6 +98,7 @@ struct hash_table {
     void (*value_free)(void* value);
     void* (*copy)(void* value);
 
+    bool not_ttl;
     size_t max_ht_size;
     _Atomic size_t cur_ht_size;
     ht_basket* baskets;

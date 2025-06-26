@@ -11,16 +11,8 @@
 #include "connection.h"
 #include "event.h"
 
-void add(connection* conn, conn_list* list) ;
-void conn_list_lock(wthread* wthrd);
-void conn_list_unlock(wthread* wthrd);
-void delete(connection* conn, conn_list* list);
-void free_wthread(wthread* wthrd);
-void init_notify(e_notify* not);
-void not_close(e_notify* not);
-
 // Adding an element to the event list.
-void add(connection* conn, conn_list* list) {
+static void add(connection* conn, conn_list* list) {
     conn->next = NULL;
     conn->prev = NULL;
     if (list->first == NULL) {

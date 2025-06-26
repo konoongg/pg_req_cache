@@ -8,7 +8,7 @@ from t.utils.create_resp import *
 from t.utils.db_connect import *
 
 SYSTEM_NAME = "pgcache"  # Название системы (настраивается в скрипте)
-PROGRAM_VERSION = "0.4"       # Версия программы
+PROGRAM_VERSION = "0.5"       # Версия программы
 DB_STATE = "10000 записей, два текстового столбца"  # Состояние БД
 THREADS_IN_SYSTEM = 4
 

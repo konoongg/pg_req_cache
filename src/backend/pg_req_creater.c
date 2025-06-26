@@ -149,6 +149,5 @@ char* create_pg_set(key_info* key_i, cache_response* data) {
     bd_req = wcalloc(size_req * sizeof(char));
     snprintf(bd_req, size_req, "INSERT INTO %s (%s) VALUES (%s) ON CONFLICT (%s) DO UPDATE SET %s;",
                                         key_i->table, columns_name, columns_value, key_i->column, set_values);
-
     return bd_req;
 }

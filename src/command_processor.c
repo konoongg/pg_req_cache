@@ -23,14 +23,6 @@ extern config_redis config;
 extern default_resp_answer def_resp;
 command_dict* com_dict;
 
-process_result do_config(client_req* cl_req, answer* answ, connection* conn);
-process_result do_del(client_req* cl_req, answer* answ, connection* conn);
-process_result do_get(client_req* cl_req, answer* answ, connection* conn);
-process_result do_info(client_req* req, answer* answ, connection* conn);
-process_result do_ping(client_req* cl_req, answer* answ, connection* conn);
-process_result do_set(client_req* cl_req, answer* answ, connection* conn);
-void free_command(int hash);
-void to_lower(char* word, int size);
 
 // A structure mapping command names to the functions that execute them.
 redis_command commands[] = {
@@ -42,7 +34,7 @@ redis_command commands[] = {
     {"info", do_info}
 };
 
-process_result do_info(client_req* req, answer* answ, connection* conn) {
+static process_result do_info(client_req* req, answer* answ, connection* conn) {
     answ->answer_size = def_resp.pong.answer_size;
     answ->answer = wcalloc(answ->answer_size  * sizeof(char));
     memcpy(answ->answer, def_resp.pong.answer, answ->answer_size);
@@ -50,14 +42,14 @@ process_result do_info(client_req* req, answer* answ, connection* conn) {
 }
 
 //In the case of receiving a PING command, send PONG back to the user.
-process_result do_ping(client_req* req, answer* answ, connection* conn) {
+static process_result do_ping(client_req* req, answer* answ, connection* conn) {
     answ->answer_size = def_resp.pong.answer_size;
     answ->answer = wcalloc(answ->answer_size  * sizeof(char));
     memcpy(answ->answer, def_resp.pong.answer, answ->answer_size);
     return DONE;
 }
 
-process_result do_config(client_req* req, answer* answ, connection* conn) {
+static process_result do_config(client_req* req, answer* answ, connection* conn) {
     to_lower(req->argv[1], req->argv_size[1]);
     if (strncmp("get", req->argv[1], 3) == 0 && req->argv_size[1] == 3) {
         if (strncmp("save", req->argv[2], 4) == 0 && req->argv_size[2] == 4) {
@@ -81,32 +73,47 @@ process_result do_config(client_req* req, answer* answ, connection* conn) {
 * we register a DB worker to fetch the data from the database
 * and return a code indicating that the client needs to wait for the data to be retrieved.
 */
-process_result do_get(client_req* cl_req, answer* answ, connection* conn) {
-    //ereport(INFO, errmsg("do_get: start"));
+static process_result do_get(client_req* cl_req, answer* answ, connection* conn) {
     char* key = cl_req->argv[1];
     int key_size = cl_req->argv_size[1];
     key_info* key_i = create_key_info(key, key_size);
     cache_response* res;
-    //ereport(INFO, errmsg("do_get: get"));
+    bool expeted_prepare = true;
+    data_version* version = NULL;
 
-    data_version* version = get_cache(key_i);
-    //ereport(INFO, errmsg("do_get: finish get %p", res));
+    if (!key_i->direct) {
+        version = get_cache(key_i);
+    }
+
     if (version == NULL) {
         char* req_to_db;
 
         report_cache_miss();
-        //ereport(INFO, errmsg("do_get: res == NULL table_size %d", key_i->table_size));
         req_to_db = create_pg_get(key_i);
         move_from_active_to_wait(conn);
         register_command(key_i, key_i->table, key_i->table_size, req_to_db, conn, CACHE_UPDATE);
-        //ereport(INFO, errmsg("do_get: DB_REQ"));
         return DB_REQ;
     }
 
     res = version->value;
 
     destroy_key_info(key_i);
-    create_array_resp(answ, res);
+    if (atomic_compare_exchange_strong(&(res->prepare_answer_valid), &expeted_prepare, true)) {
+        answ->answer_size = res->prepare_answer_size;
+        answ->answer = wcalloc(res->prepare_answer_size * sizeof(char));
+        memcpy(answ->answer, res->prepare_answer, answ->answer_size);
+    } else {
+        bool expected_not_update = false;
+        create_array_resp(answ, res);
+        if (atomic_compare_exchange_strong(&(res->updated), &expected_not_update, false)) {
+            res->prepare_answer_size = answ->answer_size;
+            res->prepare_answer = wcalloc(res->prepare_answer_size * sizeof(char));
+            memcpy(res->prepare_answer, answ->answer, res->prepare_answer_size);
+            atomic_store(&(res->prepare_answer_valid), true);
+            atomic_store(&(res->updated), false);
+        }
+    }
+
     drop_version(version);
     //ereport(INFO, errmsg("do_get: DONE"));
     return DONE;
@@ -120,19 +127,40 @@ process_result do_get(client_req* cl_req, answer* answ, connection* conn) {
 * The data is updated in the cache,
 * and an event is registered to update the data in the database.
 */
-process_result do_set(client_req* cl_req, answer* answ, connection* conn) {
+static process_result do_set(client_req* cl_req, answer* answ, connection* conn) {
     char* key = cl_req->argv[1];
     char* value = cl_req->argv[2];
     int key_size = cl_req->argv_size[1];
     int value_size = cl_req->argv_size[2];
     created_cache_respons* res;
     char* req_to_db;
+    size_t ttl_ms = 0;
+    key_info* key_i;
 
-    key_info* key_i = create_key_info(key, key_size);
+    for (int i = 3; i < cl_req->argc; ++i) {
+        if (strncmp(cl_req->argv[i], "EX" , 2) == 0 && i != cl_req->argc - 1) {
+            char *endptr;
+            ttl_ms = strtoll(cl_req->argv[i + 1], &endptr, 10);
+            if (*endptr != '\0' || ttl_ms <= 0) {
+                return PROCESS_ERR;
+            }
+            ttl_ms *= 1000;
+            ++i;
+        } else if (strncmp(cl_req->argv[i], "PX" , 2) == 0 && i != cl_req->argc - 1) {
+            char *endptr;
+            ttl_ms = strtoll(cl_req->argv[i + 1], &endptr, 10);
+            if (*endptr != '\0' || ttl_ms <= 0) {
+                return PROCESS_ERR;
+            }
+            ++i;
+        }
+    }
+
+    key_i = create_key_info(key, key_size);
     res = create_response_by_resp(key_i->table, value, value_size);
     req_to_db = create_pg_set(key_i, res->res);
 
-    set_cache(key_i, res->res, res->size);
+    set_cache(key_i, res->res, res->size, ttl_ms);
 
     answ->answer_size = def_resp.ok.answer_size;
     answ->answer = wcalloc(answ->answer_size  * sizeof(char));
@@ -149,7 +177,7 @@ process_result do_set(client_req* cl_req, answer* answ, connection* conn) {
 * Each provided key is removed from the cache,
 * and then an event is registered to delete the data from the database.
 */
-process_result do_del(client_req* cl_req, answer* answ, connection* conn) {
+static process_result do_del(client_req* cl_req, answer* answ, connection* conn) {
     char* req_to_db;
     int count_del_keys = cl_req->argc - 1;
     key_info** del_keys = wcalloc(count_del_keys * sizeof(key_info*));
@@ -173,7 +201,7 @@ process_result do_del(client_req* cl_req, answer* answ, connection* conn) {
     return DB_APPROVE;
 }
 
-void free_command(int hash) {
+static void free_command(int hash) {
     command_entry* cur_entry = com_dict->commands[hash]->first;
 
     while (cur_entry != NULL) {
@@ -210,7 +238,7 @@ void init_commands(void) {
     }
 }
 
-void to_lower(char* word, int size) {
+static void to_lower(char* word, int size) {
     for (int i = 0; i < size; i++) {
         word[i] = tolower((unsigned char)word[i]);
     }

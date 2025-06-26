@@ -2,29 +2,35 @@
 
 MODULE_big = pg_redis_proxy
 
+INCLUDE_SUBDIRS := $(shell find . -type d -not -path '*/\.*' -not -path './src*')
+PG_CPPFLAGS += $(addprefix -I,$(INCLUDE_SUBDIRS)) -I.
+
 OBJS = \
 	$(WIN32RES) \
-	alloc.o \
-	cache_serializer.o \
-	cache.o \
-	command_processor.o \
-	config.o \
-	connection.o \
-	data_parser.o \
-	db.o \
-	event.o \
-	hash.o \
-	ht_response_type.o \
-	ht_table_type.o \
-	ht.o \
-	io.o \
-	pg_req_creater.o \
-	query_cache_controller.o \
-	redis_proxy.o \
-	resp_creater.o \
-	socket_wrapper.o \
-	stats.o \
-	worker.o
+	src/alloc.o \
+	src/backend/db.o \
+	src/backend/pg_req_creater.o \
+	src/cache/cache_gc.o \
+	src/cache/cache_serializer.o \
+	src/cache/cache.o \
+	src/cache/query_cache_controller.o \
+	src/command_processor.o \
+	src/config.o \
+	src/connection/connection.o \
+	src/connection/event.o \
+	src/connection/io.o \
+	src/connection/socket_wrapper.o \
+	src/data_parser.o \
+	src/hash_table/hash.o \
+	src/hash_table/ht_response_type.o \
+	src/hash_table/ht_table_type.o \
+	src/hash_table/ht.o \
+	src/invalidation/invalid.o \
+	src/invalidation/wal_reader.o \
+	src/redis_proxy.o \
+	src/resp_creater.o \
+	src/stats.o \
+	src/worker.o
 
 
 EXTENSION = pg_redis_proxy

@@ -9,15 +9,14 @@
 #include "alloc.h"
 #include "config.h"
 
-void defalt_setting_init(void);
 
 extern config_redis config;
 
-void defalt_setting_init(void) {
+static void defalt_setting_init(void) {
 
     config.c_conf.count_basket_values = 100003; // cache basket
     config.c_conf.count_basket_tables = 101; // cache basket
-    config.c_conf.ttl_s = 0; // cache ttl
+    config.c_conf.ttl_s = 1; // cache ttl
     config.c_conf.max_storage_size = (size_t)1024 * 1024 * 1024 * 1024;
     config.c_conf.seed = 101; // hash seed
 
@@ -26,7 +25,7 @@ void defalt_setting_init(void) {
     config.worker_conf.count_worker = 4;
     config.worker_conf.listen_port = 6379;
 
-    config.db_conf.count_backend = 4; // count libpq backend
+    config.db_conf.count_backend = 1 ;// count libpq backend
     config.db_conf.dbname = wcalloc(9 * sizeof(char));
     config.db_conf.user = wcalloc(9 * sizeof(char));
     memcpy(config.db_conf.dbname, "postgres", 9);

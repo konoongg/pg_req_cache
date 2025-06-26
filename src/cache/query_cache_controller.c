@@ -19,15 +19,6 @@ db_worker dbw;
 extern config_redis config;
 
 
-command_to_db* get_command(void);
-proc_status notify_db(connection* conn);
-proc_status process_read_db(connection* conn);
-proc_status process_write_db(connection* conn);
-void dbw_lock(void);
-void dbw_unlock(void);
-void free_db_command(command_to_db* cmd);
-void* start_db_worker(void*);
-
 void free_db_command(command_to_db* cmd) {
     destroy_key_info(cmd->key);
     free(cmd->table);
@@ -155,7 +146,7 @@ proc_status process_read_db(connection* conn) {
 
         event_notify(cmd->conn->wthrd->not);
         if (cmd->reason == CACHE_UPDATE) {
-            set_cache(cmd->key, res->res, res->size );
+            set_cache(cmd->key, res->res, res->size, 0);
         }
         free_db_command(cmd);
         stop_event(dbw.wthrd->l, conn->r_data->handle);

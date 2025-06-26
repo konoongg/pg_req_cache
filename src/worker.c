@@ -27,14 +27,6 @@
 #include "stats.h"
 #include "worker.h"
 
-proc_status notify(connection* conn);
-proc_status process_accept(connection* conn);
-proc_status process_data(connection* conn);
-proc_status process_read(connection* conn);
-proc_status process_write(connection* conn);
-void finish_connection(connection* conn);
-void* start_worker(void* argv);
-
 _Atomic int worker_id = 0;
 extern config_redis config;
 thread_local wthread wthrd;
@@ -102,7 +94,7 @@ proc_status process_write(connection* conn) {
 }
 
 // This event is processed solely to notify the loop that it needs to check the queue of active connections
-proc_status notify(connection* conn) {
+static proc_status notify(connection* conn) {
     not_status not_s = event_get_notify(conn->wthrd->not);
 
     report_worker_notify(wthrd.id);
@@ -119,7 +111,7 @@ proc_status notify(connection* conn) {
 * After the data is read, we process it by calling the corresponding function.
 * All received requests are handled.
 */
-proc_status process_data(connection* conn) {
+static proc_status process_data(connection* conn) {
     //ereport(INFO, errmsg("process_data: start"));
     io_read* r_data = (io_read*)conn->r_data->data;
     answer_list* w_data = (answer_list*)conn->w_data->data;
@@ -167,7 +159,7 @@ proc_status process_data(connection* conn) {
 * We read data up to the size of the buffer and
 * parse all available data (e.g., if two requests are received, we process both).
 * If an error or connection closure occurs, we release the associated resources. */
-proc_status process_read(connection* conn) {
+static proc_status process_read(connection* conn) {
     //ereport(INFO, errmsg("process_read: start"));
     exit_status status;
     int buffer_free_size;
@@ -212,7 +204,7 @@ proc_status process_read(connection* conn) {
 }
 
 // Handling the accept operation: creating a new connection and adding it to the pending queue.
-proc_status process_accept(connection* conn) {
+static proc_status process_accept(connection* conn) {
     //ereport(INFO, errmsg("process_accept: start"));
     answer_list* a_list;
     char* read_buffer;
@@ -276,7 +268,7 @@ proc_status process_accept(connection* conn) {
 * which is necessary to notify the worker to check the active events list.
 * The processing of the list is then initiated.
 */
-void* start_worker(void* argv) {
+static void* start_worker(void* argv) {
     connection* listen_conn;
     connection* efd_conn;
     int efd;

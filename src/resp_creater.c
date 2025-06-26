@@ -17,9 +17,6 @@ const char crlf[] = "\r\n";
 
 default_resp_answer def_resp;
 
-void create_bulk_string_resp(answer* answ, char* src, int size);
-void create_err_resp(answer* answ, char* src);
-void create_simple_string_resp(answer* answ, char* src);
 
 /*
 *This file contains the functions responsible for generating the response in RESP

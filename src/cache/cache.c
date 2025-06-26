@@ -64,7 +64,6 @@ void init_cache(void) {
 * If the data does not exist, it returns NULL.
 */
 data_version* get_cache(key_info* key_i) {
-    //ereport(INFO, errmsg("get_cache: start"));
     data_version* result;
 
     find_ht_data find_table;
@@ -75,8 +74,6 @@ data_version* get_cache(key_info* key_i) {
     find_table_key ft_key;
     find_value_key fv_key;
 
-    //ereport(INFO, errmsg("do_get: table key %s", key_i->table_column));
-    //ereport(INFO, errmsg("do_get: value key %s", key_i->value));
     ft_key.key = key_i->table_column;
     ft_key.key_size = key_i->table_column_size;
 
@@ -104,20 +101,10 @@ data_version* get_cache(key_info* key_i) {
     return result;
 }
 
-/* A function to set new data by key.
-* It accepts a structure describing the data.
-* First, it checks whether such data already exists.
-* If it does, the data is updated; if not, new data is added.
-*/
-void set_cache(key_info* key_i, cache_response* v, int value_size) {
-    //ereport(INFO, errmsg("set_cache: START"));
-    create_ht_data new_value_data;
-    find_ht_data f_data;
-    find_table_key f_table;
-    find_value_key* f_value;
-
+static data_version* get_or_create_table (key_info* key_i,) {
     data_version* t_values_cur_v;
-    table_data* t_values;
+    find_ht_data f_data;
+    find_table_key f_table; // этот ключ нужен только дял поиска данных, поэтому его срок жизни огранчиен размещением на стеке
 
     f_table.key = key_i->table_column;
     f_table.key_size = key_i->table_column_size;
@@ -125,10 +112,9 @@ void set_cache(key_info* key_i, cache_response* v, int value_size) {
     f_data.hash_key_size = key_i->table_column_size;
     f_data.find_key = &f_table;
 
-    //ereport(INFO, errmsg("set_cache: key_i->table_column %s", key_i->table_column));
     t_values_cur_v = get_data(c->tables, &f_data);
 
-    if (t_values_cur_v == NULL) {
+    while (t_values_cur_v == NULL) {
         create_ht_data new_table_data;
         table_data* td;
         find_table_key* f_table = wcalloc(sizeof(find_table_key));
@@ -141,6 +127,7 @@ void set_cache(key_info* key_i, cache_response* v, int value_size) {
         new_table_data.find_key_size = sizeof(find_table_key) + f_table->key_size;
         new_table_data.hash_key_size = key_i->table_column_size;
         new_table_data.hash_key = key_i->table_column;
+        new_table_data.expire_ms = 0;
 
         td = wcalloc(sizeof(table_data));
         td->uniq_num = atomic_fetch_add(&(c->table_max_num), 1);
@@ -150,6 +137,21 @@ void set_cache(key_info* key_i, cache_response* v, int value_size) {
         set_data_if_not_exist(c->tables, &new_table_data);
         t_values_cur_v = get_data(c->tables, &f_data);
     }
+    return t_values_cur_v;
+}
+
+/* A function to set new data by key.
+* It accepts a structure describing the data.
+* First, it checks whether such data already exists.
+* If it does, the data is updated; if not, new data is added.
+*/
+void set_cache(key_info* key_i, cache_response* v, int value_size, int ttl_ms) {
+    create_ht_data new_value_data;
+    find_value_key* f_value;
+
+    data_version* t_values_cur_v;
+    table_data* t_values;
+    data_version* t_values_cur_v = get_or_create_table(key_i);
     t_values = t_values_cur_v->value;
     f_value = wcalloc(sizeof(find_value_key));
     f_value->table_num = t_values->uniq_num;
@@ -164,9 +166,56 @@ void set_cache(key_info* key_i, cache_response* v, int value_size) {
 
     new_value_data.value = v;
     new_value_data.value_size = value_size;
-    //ereport(INFO, errmsg("set_cache: key_i->value %s", key_i->value));
     set_data(c->values, &new_value_data);
     drop_version(t_values_cur_v);
+}
+
+void invalidate_cache(key_info* key_i, cache_response* v, int value_size, invalidate_mode mode) {
+    find_ht_data find_table;
+    data_version* table_values_cur_v;
+    table_data* table_values;
+
+    table_data* t_values;
+    create_ht_data new_value_data;
+    find_value_key* f_value;
+
+    find_table_key ft_key;
+
+    ft_key.key = key_i->table_column;
+    ft_key.key_size = key_i->table_column_size;
+
+    find_table.find_key = &ft_key;
+    find_table.hash_key = key_i->table_column;
+    find_table.hash_key_size = key_i->table_column_size;
+    table_values_cur_v = get_data(c->tables, &find_table);
+    if (table_values_cur_v == NULL) {
+        return;
+    }
+
+    t_values = table_values_cur_v->value;
+    f_value = wcalloc(sizeof(find_value_key));
+    f_value->table_num = t_values->uniq_num;
+    f_value->key_size = key_i->value_size;
+    f_value->key = wcalloc(f_value->key_size * sizeof(char));
+    memcpy(f_value->key, key_i->value, f_value->key_size);
+
+    if (mode == INV_UPDATE) {
+
+        
+        new_value_data.find_key = f_value;
+        new_value_data.find_key_size = sizeof(find_value_key) + f_value->key_size;
+
+        new_value_data.hash_key_size = key_i->full_size;
+        new_value_data.hash_key = key_i->full_key;
+
+        new_value_data.value = v;
+        new_value_data.value_size = value_size;
+        invalidate_data(c->values, &new_value_data);
+
+    } else if (mode == INV_DELETE){
+        invalidate_data(c->values, &new_value_data);
+    }
+    drop_version(table_values_cur_v);
 }
 
 int delete_cache(key_info* key_i) {
@@ -212,3 +261,10 @@ void free_cache(void) {
     free(c);
 }
 
+size_t get_cur_cache_size(void) {
+    return get_cur_size(c->values);
+}
+
+void cache_clean(int del_time_s) {
+    ht_clean(c->values, del_time_s);
+}

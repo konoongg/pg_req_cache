@@ -13,11 +13,6 @@
 #include "db.h"
 #include "storage_data.h"
 
-char* create_conn_req(void);
-char* create_t_info_req(char* table_name);
-void connect_to_db(backend* backends);
-void init_meta_data(void);
-
 extern config_redis config;
 db_meta_data* meta;
 
@@ -228,7 +223,7 @@ void init_meta_data(void) {
             } else if (strncmp(type, "integer", 7) == 0) {
                 t->columns[c].type = INT;
             } else {
-                ereport(INFO, errmsg("init_meta_data: undefined type: %s", type));
+                ereport(INFO, errmsg("init_meta_data: undefined type: %s  column_name: %s table %s", type, column_name, t->name));
                 PQclear(res);
                 PQfinish(conn);
                 abort();

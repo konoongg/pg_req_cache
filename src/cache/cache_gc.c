@@ -14,9 +14,6 @@
 extern config_redis config;
 cache_gc gc;
 
-proc_status check_cache(connection* conn);
-void* start_cache_gc(void*);
-
 void wake_up_cache_gc(void) {
     int err;
 
@@ -36,18 +33,19 @@ void wake_up_cache_gc(void) {
     }
 }
 
-proc_status check_cache(connection* conn) {
-    size_t cur_size = get_cur_cache_size();
+static proc_status check_cache(connection* conn) {
+    size_t cur_size;
     int cur_del_time = config.c_conf.ttl_s;
     do {
-        cache_timer_delete(cur_del_time);
+        cache_clean(cur_del_time);
         cur_del_time -= config.c_conf.ttl_s / 4;
-    } while (cur_size >= config.c_conf.max_storage_size && cur_del_time > 0);
+        cur_size = get_cur_cache_size();
+    } while (cur_size >= config.c_conf.max_storage_size && cur_del_time > 0); // if config.c_conf.ttl_s = 0 don't need do cycle, use cur_del_time > 0
     move_from_active_to_wait(conn);
     return WAIT_PROC;
 }
 
-void* start_cache_gc(void*) {
+static void* start_cache_gc(void*) {
     while (true) {
         CHECK_FOR_INTERRUPTS();
         loop_run(gc.gc_wthrd->l);
