@@ -45,7 +45,7 @@ enum exit_status {
 * the number of arguments passed, and the arguments themselves.
 */
 struct client_req {
-    bool is_ready;
+    bool is_ready; //  если считали запрос полностью
     char** argv;
     int argc;
     int* argv_size;

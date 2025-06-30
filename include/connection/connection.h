@@ -44,6 +44,7 @@ enum conn_status {
     READ, // read data from connect
     WRITE, // write data to connect
     PROCESS, // proccess data
+    DO_CACHE, // command apply to db, and now need to apply it to cache
     NOTIFY, // Handling the notification that the active connections queue needs to be checked
 
     // Similar functions for the loop running within the database worker.

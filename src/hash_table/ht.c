@@ -80,7 +80,7 @@ static ht_data* find_data_in_basket(hash_table* ht, ht_basket* basket, void* fin
             } else if (data->expire_ms == 0 && ht->ttl_s  > 0 && take_tll) {
                 size_t current_ms = get_current_ms();
                 size_t elapsed_ms = current_ms - (size_t)(data->last_time * 1000);
-                if (elapsed_ms >= ht->ttl_s  * 1000 ) {
+                if (elapsed_ms >= ht->ttl_s  * 1000) {
                     return NULL;
                 }
             }
@@ -164,7 +164,7 @@ hash_table* create_ht(create_ht_info* info) {
         (ht->baskets[i]).lock = wcalloc(sizeof(pthread_rwlock_t));
         err = pthread_rwlock_init((ht->baskets[i]).lock, NULL);
         if (err != 0) {
-            ////ereport(INFO, errmsg("create_ht: pthread_rwlock_init %s", strerror(err)));
+            ereport(INFO, errmsg("create_ht: pthread_rwlock_init %s", strerror(err)));
             abort();
         }
     }
@@ -259,10 +259,9 @@ void invalidate_data(hash_table* ht, invalid_ht_data* inv) {
 }
 
 
-static ht_data*  set_data_without_lock(hash_table* ht, ht_basket* basket, create_ht_data* new_data) {
+static ht_data* set_data_without_lock(hash_table* ht, ht_basket* basket, create_ht_data* new_data) {
     ht_data* data;
     int data_size;
-    fprintf(stderr, "SET START\n");
     data = find_data_in_basket(ht, basket, new_data->find_key, WITHOUT_TLL);
     if (data == NULL) {
         if (basket->first == NULL) {

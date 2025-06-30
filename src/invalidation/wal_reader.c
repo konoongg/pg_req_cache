@@ -68,14 +68,12 @@ XLogRecord* read_next_XLog_record(wal_info* wal) {
 		while (XLogRecPtrIsInvalid(first_valid_record)) {
 			first_valid_record = XLogFindNextRecord(xlogreader, wal->start_lsn);
 			__asm__ __volatile__("pause");
-			ereport(INFO, (errmsg("could not find a valid record after %X/%X", LSN_FORMAT_ARGS(wal->start_lsn))));
+			//ereport(INFO, (errmsg("could not find a valid record after %X/%X", LSN_FORMAT_ARGS(wal->start_lsn))));
 		}
 	}
 
 	record = XLogReadRecord(xlogreader, &errormsg);
-
 	if (record == NULL)	{
-
 		if (errormsg) {
             ereport(ERROR, (errcode_for_file_access(),  errmsg("could not read WAL at %X/%X: %s", LSN_FORMAT_ARGS(xlogreader->EndRecPtr), errormsg)));
             abort();

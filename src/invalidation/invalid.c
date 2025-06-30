@@ -93,11 +93,9 @@ static void process_update(XLogReaderState* xlogreader) {
 }
 
 static void process_heap(XLogRecord*  record, XLogReaderState* xlogreader) {
+	elog(INFO, "process_heap:start");
     char info = record->xl_info & ~XLR_INFO_MASK;
     switch (info & XLOG_HEAP_OPMASK) {
-        case XLOG_HEAP_INSERT:
-			elog(INFO, "process_heap: XLOG_HEAP_INSERT");
-			break;
 		case XLOG_HEAP_DELETE:
 			elog(INFO, "process_heap: XLOG_HEAP_DELETE");
 			break;
@@ -112,41 +110,17 @@ static void process_heap(XLogRecord*  record, XLogReaderState* xlogreader) {
             process_update(xlogreader);
 			elog(INFO, "process_heap: XLOG_HEAP_HOT_UPDATE");
 			break;
-		case XLOG_HEAP_CONFIRM:
-			elog(INFO, "process_heap: XLOG_HEAP_CONFIRM");
-			break;
-		case XLOG_HEAP_LOCK:
-			elog(INFO, "process_heap: XLOG_HEAP_LOCK");
-			break;
-		case XLOG_HEAP_INPLACE:
-			elog(INFO, "process_heap: XLOG_HEAP_INPLACE");
-			break;
     }
 }
 
 static void process_xact(XLogRecord*  record, XLogReaderState* xlogreader) {
-    char info = record->xl_info & ~XLR_INFO_MASK;
+    char info = XLogRecGetInfo(xlogreader) & XLOG_XACT_OPMASK;
     switch (info) {
         case XLOG_XACT_COMMIT:
 			elog(INFO, "process_xact: XLOG_XACT_COMMIT");
             break;
-        case XLOG_XACT_COMMIT_PREPARED:
-			elog(INFO, "process_xact: XLOG_XACT_COMMIT_PREPARED");
-            break;
         case XLOG_XACT_ABORT:
 			elog(INFO, "process_xact: XLOG_XACT_ABORT");
-            break;
-        case XLOG_XACT_ABORT_PREPARED:
-			elog(INFO, "process_xact: XLOG_XACT_ABORT_PREPARED");
-            break;
-        case XLOG_XACT_PREPARE:
-			elog(INFO, "process_xact: XLOG_XXLOG_XACT_PREPAREACT_COMMIT");
-            break;
-        case XLOG_XACT_ASSIGNMENT:
-			elog(INFO, "process_xact: XLOG_XACT_ASSIGNMENT");
-            break;
-        case XLOG_XACT_INVALIDATIONS:
-			elog(INFO, "process_xact: XLOG_XACT_INVALIDATIONS");
             break;
     }
 }
@@ -172,11 +146,13 @@ static void* start_invalidator(void* arg) {
         while (cur_index < length) {
             struct inotify_event* event = (struct inotify_event*) &(buffer[cur_index]);
             if (event->len && event->mask == IN_MODIFY) {
-                XLogRecord*  record = read_next_XLog_record(wal);
-                if (!record) {
-                    break;
+                while (true) {
+                    XLogRecord*  record = read_next_XLog_record(wal);
+                    if (!record) {
+                        break;
+                    }
+                    process_record(record, wal->xlogreader);
                 }
-                process_record(record, wal->xlogreader);
             }
             cur_index += EVENT_SIZE + event->len;
         }

@@ -61,7 +61,6 @@ created_cache_respons* create_respons_by_xlog(char* record, int record_size, siz
 }
 
 created_cache_respons* create_response_by_resp(char* table, char* value, int value_size) {
-    fprintf(stderr, "start create_response_by_resp\n");
     created_cache_respons* ccr;
     cache_response* res;
     int start_pos;
@@ -136,7 +135,7 @@ created_cache_respons* create_response_by_resp(char* table, char* value, int val
 // Creating a structure describing the cached data based on data received from the database.
 created_cache_respons* create_response_by_pg(PGresult* result, char* table) {
     created_cache_respons* ccr = init_meta_ccr(PQnfields(result), PQntuples(result));
-    cache_response* res = wcalloc(sizeof(cache_response));
+    cache_response* res = ccr->res;
 
     for (int column = 0; column < res->count_fields; ++column) {
         char* column_name = PQfname(result, column);

@@ -119,7 +119,6 @@ static process_result do_get(client_req* cl_req, answer* answ, connection* conn)
     }
 
     drop_version(version);
-    //ereport(INFO, errmsg("do_get: DONE"));
     return DONE;
 }
 
@@ -133,47 +132,47 @@ static process_result do_get(client_req* cl_req, answer* answ, connection* conn)
 */
 static process_result do_set(client_req* cl_req, answer* answ, connection* conn) {
     char* key = cl_req->argv[1];
-    char* value = cl_req->argv[2];
     int key_size = cl_req->argv_size[1];
+    char* value = cl_req->argv[2];
     int value_size = cl_req->argv_size[2];
-    created_cache_respons* res;
-    char* req_to_db;
-    size_t ttl_ms = 0;
-    key_info* key_i;
+    key_info* key_i = create_key_info(key, key_size);
+    created_cache_respons* res = create_response_by_resp(key_i->table, value, value_size);
+    process_result result;
 
-    for (int i = 3; i < cl_req->argc; ++i) {
-        if (strncmp(cl_req->argv[i], "EX" , 2) == 0 && i != cl_req->argc - 1) {
-            char *endptr;
-            ttl_ms = strtoll(cl_req->argv[i + 1], &endptr, 10);
-            if (*endptr != '\0' || ttl_ms <= 0) {
-                return PROCESS_ERR;
+    if (conn->status == DO_CACHE) {
+        char* req_to_db = create_pg_set(key_i, res->res);
+        register_command(NULL, key_i->table, key_i->table_size, req_to_db, conn, CACHE_SYNC);
+        conn->status = DO_CACHE;
+        result = DB_APPROVE;
+        move_from_active_to_wait(conn);
+    } else {
+        size_t ttl_ms = 0;
+        for (int i = 3; i < cl_req->argc; ++i) {
+            if (strncmp(cl_req->argv[i], "EX" , 2) == 0 && i != cl_req->argc - 1) {
+                char *endptr;
+                ttl_ms = strtoll(cl_req->argv[i + 1], &endptr, 10);
+                if (*endptr != '\0' || ttl_ms <= 0) {
+                    return PROCESS_ERR;
+                }
+                ttl_ms *= 1000;
+                ++i;
+            } else if (strncmp(cl_req->argv[i], "PX" , 2) == 0 && i != cl_req->argc - 1) {
+                char *endptr;
+                ttl_ms = strtoll(cl_req->argv[i + 1], &endptr, 10);
+                if (*endptr != '\0' || ttl_ms <= 0) {
+                    return PROCESS_ERR;
+                }
+                ++i;
             }
-            ttl_ms *= 1000;
-            ++i;
-        } else if (strncmp(cl_req->argv[i], "PX" , 2) == 0 && i != cl_req->argc - 1) {
-            char *endptr;
-            ttl_ms = strtoll(cl_req->argv[i + 1], &endptr, 10);
-            if (*endptr != '\0' || ttl_ms <= 0) {
-                return PROCESS_ERR;
-            }
-            ++i;
         }
+        set_cache(key_i, res->res, res->size, ttl_ms);
+        answ->answer_size = def_resp.ok.answer_size;
+        answ->answer = wcalloc(answ->answer_size  * sizeof(char));
+        memcpy(answ->answer, def_resp.ok.answer, answ->answer_size);
+        result = DONE;
     }
-
-    key_i = create_key_info(key, key_size);
-    res = create_response_by_resp(key_i->table, value, value_size);
-    req_to_db = create_pg_set(key_i, res->res);
-
-    set_cache(key_i, res->res, res->size, ttl_ms);
-
-    answ->answer_size = def_resp.ok.answer_size;
-    answ->answer = wcalloc(answ->answer_size  * sizeof(char));
-
-    memcpy(answ->answer, def_resp.ok.answer, answ->answer_size);
-    move_from_active_to_wait(conn);
-    register_command(NULL, key_i->table, key_i->table_size, req_to_db, conn, CACHE_SYNC);
     destroy_key_info(key_i);
-    return DB_APPROVE;
+    return result;
 }
 
 /*

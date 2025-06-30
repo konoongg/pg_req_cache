@@ -69,10 +69,10 @@ void proxy_start_work(Datum main_arg) {
     init_cache();
     ereport(INFO, errmsg("finish init cache"));
 
-    //init_cache_gc();
+    init_cache_gc();
     ereport(INFO, errmsg("finish init cache gc"));
 
-    //init_invalidator();
+    init_invalidator();
     ereport(INFO, errmsg("finish init wal reader"));
 
     ereport(INFO, errmsg("start init db worker"));
