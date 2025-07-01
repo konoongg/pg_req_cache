@@ -14,6 +14,7 @@
 typedef struct cache cache;
 
 data_version* get_cache(key_info* key_i);
+ht_data* prepare_inv_cache(key_info* key_i, size_t xid);
 int delete_cache(key_info* key_i);
 size_t get_cur_cache_size(void);
 void cache_clean(int del_time_s);

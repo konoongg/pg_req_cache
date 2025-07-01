@@ -17,6 +17,7 @@ typedef struct invalid_ht_data invalid_ht_data;
 
 data_version* get_data(hash_table* ht, find_ht_data* find);
 hash_table* create_ht(create_ht_info* info);
+ht_data* prepare_invalidate(hash_table* ht, find_ht_data* find, size_t xid);
 int delete_data(hash_table* ht, find_ht_data* find);
 size_t get_cur_size(hash_table* ht);
 void destroy_ht(hash_table* ht);
@@ -33,6 +34,25 @@ struct data_version {
     void* value;
 };
 
+/*
+ * Cache invalidation logic is quite complex. When invalidation occurs:
+ * - The cache bucket is locked and marked with a transaction xid (atomic variable)
+ * - set operations are simple (just overwrite/add new versions)
+ * - get/del operations require careful handling:
+ *   * get checks the xid:
+ *     - xid=0: no invalidation occurred
+ *     - xid≠0: check invalidation pool
+ *       - If xid exists: transaction is still in progress (current value can be used)
+ *       - Note: Value may change after check, but WAL replay ensures eventual consistency
+ *   * This mechanism guarantees cache consistency - transactions are either fully applied or not at all
+ *
+ * Special cases:
+ * - If set/del arrives for uncommitted transaction:
+ *   - No problem (means commit/abort occurred but wasn't processed yet)
+ *   - Current implementation still invalidates in this case
+ * - del operation:
+ *   - Removes the version but preserves ht_data if invalidation markers exist
+ */
 struct ht_data {
     data_version* value_first;
     data_version* value_cur;
@@ -42,7 +62,10 @@ struct ht_data {
     time_t last_time;
     size_t expire_ms;
     size_t ht_data_size;
-    int invalid_save;
+
+    ht_data* next_inv;
+    _Atomic size_t xid_inv;
+    _Atomic bool invalidated;
 };
 
 struct create_ht_info {

@@ -150,8 +150,6 @@ static proc_status process_data(connection* conn) {
         } else if (res == DB_REQ) {
             return WAIT_PROC;
         } else if (res == DB_APPROVE) {
-            // r_data->reqs->first = r_data->reqs->first->next;
-            // free_cl_req(cur_req);
             return WAIT_PROC;
         } else if  (res == PROCESS_ERR) {
             abort();

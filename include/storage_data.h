@@ -25,6 +25,8 @@ struct cache_response {
     int prepare_answer_size;
     bool prepare_answer_valid;
     bool updated; // кажется это поле больше не нужно, так как с версионностью неикто не может обноить конкретную версию
+
+    
 };
 
 struct created_cache_respons {

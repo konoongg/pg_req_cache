@@ -139,7 +139,7 @@ static process_result do_set(client_req* cl_req, answer* answ, connection* conn)
     created_cache_respons* res = create_response_by_resp(key_i->table, value, value_size);
     process_result result;
 
-    if (conn->status == DO_CACHE) {
+    if (conn->status != DO_CACHE) {
         char* req_to_db = create_pg_set(key_i, res->res);
         register_command(NULL, key_i->table, key_i->table_size, req_to_db, conn, CACHE_SYNC);
         conn->status = DO_CACHE;
@@ -181,27 +181,43 @@ static process_result do_set(client_req* cl_req, answer* answ, connection* conn)
 * and then an event is registered to delete the data from the database.
 */
 static process_result do_del(client_req* cl_req, answer* answ, connection* conn) {
-    char* req_to_db;
-    int count_del_keys = cl_req->argc - 1;
-    key_info** del_keys = wcalloc(count_del_keys * sizeof(key_info*));
-    int count_del = 0;
+    process_result result;
 
-    for (int i = 1; i < cl_req->argc; ++i) {
-        del_keys[i - 1] = create_key_info(cl_req->argv[i], cl_req->argv_size[i]);
-        count_del += delete_cache(del_keys[i - 1]);
+
+    if (conn->status != DO_CACHE) {
+        int count_del_keys = cl_req->argc - 1;
+        char* req_to_db;
+        key_info** del_keys = wcalloc(count_del_keys * sizeof(key_info*));
+
+        for (int i = 1; i < cl_req->argc; ++i) {
+            del_keys[i - 1] = create_key_info(cl_req->argv[i], cl_req->argv_size[i]);
+        }
+
+        req_to_db = create_pg_del(count_del_keys, del_keys);
+        register_command(NULL, del_keys[0]->table, del_keys[0]->table_size, req_to_db, conn, CACHE_SYNC);
+        move_from_active_to_wait(conn);
+
+        for (int i = 0; i < count_del_keys; ++i) {
+            destroy_key_info(del_keys[i]);
+        }
+        free(del_keys);
+
+        conn->status = DO_CACHE;
+        result = DB_APPROVE;
+    } else {
+        int count_del = 0;
+
+        for (int i = 1; i < cl_req->argc; ++i) {
+            key_info* key_i = create_key_info(cl_req->argv[i], cl_req->argv_size[i]);
+            count_del += delete_cache(key_i);
+            destroy_key_info(key_i);
+        }
+
+        result = DONE;
+        create_num_resp(answ, count_del);
     }
 
-    move_from_active_to_wait(conn);
-
-    req_to_db = create_pg_del(count_del_keys, del_keys);
-    register_command(NULL, del_keys[0]->table, del_keys[0]->table_size, req_to_db, conn, CACHE_SYNC);
-
-    for (int i = 0; i < count_del_keys; ++i) {
-        destroy_key_info(del_keys[i]);
-    }
-    free(del_keys);
-    create_num_resp(answ, count_del);
-    return DB_APPROVE;
+    return result;
 }
 
 // static void free_command(int hash) {
@@ -215,7 +231,6 @@ static process_result do_del(client_req* cl_req, answer* answ, connection* conn)
 
 //     free(com_dict->commands[hash]);
 // }
-
 
 /*
 * The initialization of callback commands is taking place.
@@ -240,8 +255,6 @@ void init_commands(void) {
         com_dict->commands[hash]->last->command = &(commands[i]);
     }
 }
-
-
 
 // The submitted command is identified, and the corresponding function is invoked.
 process_result process_command(client_req* req, answer* answ, connection* conn) {

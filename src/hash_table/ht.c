@@ -10,6 +10,7 @@
 #include "alloc.h"
 #include "config.h"
 #include "ht.h"
+#include "invalid_pool.h"
 
 #define write_lock false
 #define read_lock true
@@ -65,12 +66,32 @@ static uint64_t get_current_ms() {
 /*
 * The function checks whether the specified bucket contains data with the provided key.
 * If the data exists, a reference to it is returned; otherwise, NULL is returned.
+
+* It might seem that invalidation slows down get requests because we need to check
+* whether a transaction exists, which requires taking an rw lock. In reality, this isn't
+* entirely true. If no one is trying to modify the record, then xid = 0 and no locks
+* are acquired.
+*
+* The situation is slightly different for replication. It's assumed that writes cannot
+* be performed on a replica—only reads are allowed. Instead of set/del commands,
+* invalidation is used. Thus, the rw lock in the hash table is always successfully
+* acquired during a get, but we might stall when trying to lock the invalidation table.
+*
+* This case is similar to the usual lock contention between set and get operations
+* on the same key.
 */
 static ht_data* find_data_in_basket(hash_table* ht, ht_basket* basket, void* find_key, bool take_tll) {
     ht_data* data;
     data = basket->first;
     while (data != NULL) {
         if (ht->cmp_key(data->find_key, find_key)) {
+
+            if (check_invalidate(data)) {
+                atomic_store(&(data->invalidated), true);
+                return NULL;
+            }
+
+
             if (data->expire_ms > 0 && take_tll) {
                 size_t current_ms = get_current_ms();
                 size_t elapsed_ms = current_ms - (size_t)(data->last_time * 1000);
@@ -89,6 +110,46 @@ static ht_data* find_data_in_basket(hash_table* ht, ht_basket* basket, void* fin
         data = data->next;
     }
     return NULL;
+}
+
+static bool check_invalidate(ht_data* data) {
+    size_t xid  = atomic_load(&data->xid_inv);
+    if (xid == 0) {
+        return false;
+    }
+
+    if (atomic_load(&data->invalidated)) {
+        return true;
+    }
+
+    if (check_inv_xid(xid)) {
+
+        /*
+        * This check handles the race condition where:
+        * 1. We read the xid
+        * 2. Immediately after, the transaction aborts and removes all records
+        *
+        * In this case:
+        * - Since all records were deleted, we won't find the transaction info
+        * - This could mean either:
+        *   a) The transaction committed successfully, OR
+        *   b) It was aborted
+        *
+        * The xid=0 check resolves this ambiguity:
+        * - If xid was reset to 0: Confirms the transaction was aborted
+        * - Otherwise: Consider it committed (safe default)
+        *
+        * This ensures we never return invalidated data while maintaining good performance
+        * in the common case (no ongoing invalidations).
+        */
+
+        size_t xid = atomic_load(&data->xid_inv);
+        if (xid == 0) {
+            return false;
+        }
+        return true;
+    }
+    return false;
 }
 
 static void free_version(hash_table* ht, ht_data* cur_data, data_version* version, data_version* prev_version) {
@@ -137,7 +198,19 @@ static void free_data_from_ht(hash_table* ht, ht_basket* basket, ht_data* cur_da
         version = next_version;
     }
 
-    if (all_del) {
+
+
+    /*
+    * We avoid deleting data here if any invalidation info exists,
+    * because we don't want to handle pointer reassignment for
+    * invalidated structures ourselves.
+    *
+    * Special case for DEL commands arriving via cache:
+    * - May occur when the transaction has already completed
+    * - But we haven't yet processed the WAL notification
+    */
+
+    if (all_del && atomic_load(&data->xid_inv) == 0) {
         free_data(ht, basket, cur_data, prev_data);
     }
 }
@@ -207,6 +280,22 @@ void destroy_ht(hash_table* ht) {
 void drop_version(data_version* version) {
     atomic_fetch_sub(&(version->usage_counter), 1);
     assert(version->usage_counter >= 0);
+}
+
+ht_data* prepare_invalidate(hash_table* ht, find_ht_data* find, size_t xid) {
+    ht_basket* basket;
+    ht_data* data;
+    basket = get_basket(ht, find->hash_key, find->hash_key_size);
+    basket_lock(basket, write_lock);
+
+    data = find_data_in_basket(ht, basket, find->find_key, WITH_TLL);
+
+    if (data != NULL) {
+        data->xid_inv = xid;
+    }
+
+    basket_unlock(basket);
+    return data;
 }
 
 data_version* get_data(hash_table* ht, find_ht_data* find) {
@@ -313,7 +402,7 @@ void set_data(hash_table* ht, create_ht_data* new_data) {
     basket_lock(basket, write_lock);
 
     data = set_data_without_lock(ht, basket, new_data);
-    data->invalid_save++;
+    //data->invalid_save++;
 
     basket_unlock(basket);
 }
@@ -342,6 +431,10 @@ void set_data_if_not_exist(hash_table* ht, create_ht_data* new_data) {
         data->value_cur->value = new_data->value;
         data->value_cur->next = NULL;
         data->value_cur->usage_counter = 0;
+
+        data->xid_inv = 0;
+        data->invalidate = false;
+        data->next_inv = NULL;
 
         atomic_fetch_add(&(ht->cur_ht_size), new_data->find_key_size + new_data->value_size + sizeof(ht_data));
         data->last_time = time(NULL);
@@ -419,6 +512,7 @@ void ht_clean(hash_table* ht, int recomendate_ttl_s) {
         cur_data = basket->first;
         prev_data = NULL;
         while (cur_data != NULL) {
+            bool invalidated = cur_data->invalidated
             bool all_del = true;
             bool delete_all_version = false;
             data_version* version = cur_data->value_first;
@@ -429,12 +523,12 @@ void ht_clean(hash_table* ht, int recomendate_ttl_s) {
             while (version != NULL) {
                 data_version* next_version = version->next;
                 if (version->usage_counter == 0) {
-                    if (version->dirty || delete_all_version) {
+                    if (version->dirty || delete_all_version || invalidated) {
                         free_version(ht, cur_data, version, prev_version);
                     }
 
                 } else {
-                    if (delete_all_version) {
+                    if (delete_all_version || invalidated) {
                         version->dirty = true;
                     }
                     prev_version = version;

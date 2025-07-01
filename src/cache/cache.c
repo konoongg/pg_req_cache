@@ -72,6 +72,20 @@ static data_version* get_table_column(key_info* key_i) {
     return get_data(c->tables, &find_table);
 }
 
+
+static find_ht_data create_find_value(key_info* key_i, table_data* table_values) {
+    find_ht_data find_value;
+    find_value_key fv_key;
+
+    fv_key.key = key_i->value;
+    fv_key.key_size = key_i->value_size;
+    fv_key.table_num = table_values->uniq_num;
+
+    find_value.find_key = &fv_key;
+    find_value.hash_key = key_i->full_key;
+    find_value.hash_key_size = key_i->full_size;
+}
+
 static create_ht_data prepare_value(key_info*  key_i, cache_response* v, int value_size, int table_num, int ttl_ms) {
     create_ht_data new_value_data;
     find_value_key* f_value;
@@ -103,21 +117,13 @@ data_version* get_cache(key_info* key_i) {
     data_version* table_values_cur_v;
     table_data* table_values;
 
-    find_value_key fv_key;
-
     table_values_cur_v = get_table_column(key_i);
     if (table_values_cur_v == NULL) {
         return NULL;
     }
     table_values = table_values_cur_v->value;
 
-    fv_key.key = key_i->value;
-    fv_key.key_size = key_i->value_size;
-    fv_key.table_num = table_values->uniq_num;
-
-    find_value.find_key = &fv_key;
-    find_value.hash_key = key_i->full_key;
-    find_value.hash_key_size = key_i->full_size;
+    find_value = create_find_value(key_i, table_values);
     result = get_data(c->values, &find_value);
     drop_version(table_values_cur_v);
     return result;
@@ -166,38 +172,25 @@ void set_cache(key_info* key_i, cache_response* v, int value_size, int ttl_ms) {
     drop_version(t_values_cur_v);
 }
 
-void invalidate_cache(key_info* key_i, cache_response* v, int value_size, invalidate_mode mode) {
-    data_version* t_values_cur_v;
-    invalid_ht_data inval_data;
-    table_data* t_values;
 
-    t_values_cur_v = get_table_column(key_i);
-    if (t_values_cur_v == NULL) {
-        return;
+ht_data* prepare_inv_cache(key_info* key_i, size_t xid) {
+    ht_data* result;
+    data_version* table_values_cur_v;
+    table_data* table_values;
+    find_ht_data find_value;
+
+    table_values_cur_v = get_table_column(key_i);
+    if (table_values_cur_v == NULL) {
+        return NULL;
     }
-    t_values = t_values_cur_v->value;
 
-    if (mode == INV_UPDATE) {
-        create_ht_data new_value_data = prepare_value(key_i, v, value_size, t_values->uniq_num, 0);
-        inval_data.create = &new_value_data;
-        inval_data.mode = INV_UPDATE;
-        invalidate_data(c->values, &inval_data);
-    } else if (mode == INV_DELETE){
-        find_ht_data find_value;
-        find_value_key fv_key;
-        fv_key.key = key_i->value;
-        fv_key.key_size = key_i->value_size;
-        fv_key.table_num = t_values->uniq_num;
-        find_value.find_key = &fv_key;
+    table_values = table_values_cur_v->value;
 
-        find_value.hash_key = key_i->full_key;
-        find_value.hash_key_size = key_i->full_size;
+    find_value = create_find_value(key_i, table_values);
 
-        inval_data.find = &find_value;
-        inval_data.mode = INV_DELETE;
-        invalidate_data(c->values, &inval_data);
-    }
-    drop_version(t_values_cur_v);
+    result = prepare_invalidate(c->values, &find_value, xid);
+    drop_version(table_values_cur_v);
+    return result;
 }
 
 int delete_cache(key_info* key_i) {

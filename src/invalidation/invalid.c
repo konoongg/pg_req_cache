@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <errno.h>
 #include <pthread.h>
 #include <string.h>
@@ -11,9 +12,11 @@
 #include "access/xlog_internal.h"
 #include "utils/elog.h"
 
+#include "alloc.h"
 #include "cache_serializer.h"
 #include "cache.h"
 #include "config.h"
+#include "invalid_pool.h"
 #include "invalid.h"
 #include "wal_reader.h"
 
@@ -29,6 +32,18 @@
 extern config_cache config;
 int wd;
 int wal_reader_fd;
+
+cache_invalidate* cache_inv;
+
+static void process_event(key_info* key_i, size_t xid) {
+    ht_data* data = prepare_inv_cache(key_i, xid);
+
+    if (data == NULL) {
+        return
+    }
+    add_xid_event(key_i, xid, data);
+}
+
 
 static int init_notifier(void) {
     wal_reader_fd = inotify_init1(0);
@@ -88,12 +103,8 @@ static void get_record(XLogReaderState* xlogreader) {
     return;
 }
 
-static void process_update(XLogReaderState* xlogreader) {
-    get_record(xlogreader);
-}
 
 static void process_heap(XLogRecord*  record, XLogReaderState* xlogreader) {
-	elog(INFO, "process_heap:start");
     char info = record->xl_info & ~XLR_INFO_MASK;
     switch (info & XLOG_HEAP_OPMASK) {
 		case XLOG_HEAP_DELETE:
@@ -127,9 +138,9 @@ static void process_xact(XLogRecord*  record, XLogReaderState* xlogreader) {
 
 static void process_record(XLogRecord*  record, XLogReaderState* xlogreader) {
     RmgrData rmgr = GetRmgr(record->xl_rmid);
-    if (strncmp(rmgr.rm_name, "Heap", 4 ) == 0) {
+    if (strcmp(rmgr.rm_name, "Heap") == 0 && strlen(rmgr.rm_name) == 4) {
         process_heap(record, xlogreader);
-    } else if (strncmp(rmgr.rm_name, "Transaction", 12 ) == 0) {
+    } else if (strcmp(rmgr.rm_name, "Transaction") == 0) {
         process_xact(record, xlogreader);
     }
 }
@@ -139,7 +150,9 @@ static void* start_invalidator(void* arg) {
     int wal_reader_fd = init_notifier();
     wal_info* wal = init_wal_info();
 
-    while (1) {
+    init_inv_pool();
+
+    while (true) {
         int length = read(wal_reader_fd, buffer, BUF_LEN );
         int cur_index = 0;
 
@@ -157,6 +170,14 @@ static void* start_invalidator(void* arg) {
             cur_index += EVENT_SIZE + event->len;
         }
     }
+
+    for (int i = 0; i < INVALIDATE_XID_POOL_SIZE; ++i) {
+        free(cache_inv->xid_inv[i]);
+    }
+
+    free(cache_inv->xid_inv);
+    free(cache_inv);
+
     finish_nofier();
     destroy_wal_info(wal);
     return NULL;
