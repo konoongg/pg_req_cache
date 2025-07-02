@@ -14,7 +14,7 @@ case "$1" in
         pytest ${PYTEST_OPTIONS} -s -v ddl/func_test/ ddl/load_test/
         ;;
     *)
-        echo "Usage: $0 {functional|load|all}"
+        echo "Usage: $0 {func|load|all}"
         exit 1
         ;;
 esac

@@ -5,7 +5,6 @@
 
 #include "fmgr.h"
 #include "postmaster/bgworker.h"
-#include "utils/elog.h"
 
 #include "alloc.h"
 #include "cache_gc.h"
@@ -13,6 +12,7 @@
 #include "command_processor.h"
 #include "config.h"
 #include "invalidation/invalid.h"
+#include "logger.h"
 #include "query_cache_controller.h"
 #include "resp_creater.h"
 #include "socket_wrapper.h"
@@ -46,38 +46,37 @@ static void register_proxy(void) {
     RegisterBackgroundWorker(&worker);
 }
 
-
 /*
 * The application is initializing,
 * the background worker required for database synchronization is starting,
 * and the I/O workers, which handle the main tasks, are being launched.
 */
 void proxy_start_work(Datum main_arg) {
-    ereport(INFO, errmsg("start bg worker pg_redis_proxy pid: %d", getpid()));
+    cache_log(CACHE_INFO, "start bg worker pg_redis_proxy pid");
 
     init_config();
-    ereport(INFO, errmsg("finish init config"));
+    cache_log(CACHE_INFO, "finish init config");
 
     init_stats();
-    ereport(INFO, errmsg("finish init stats"));
+    cache_log(CACHE_INFO, "finish init stats");
 
     init_def_resp();
 
     init_commands();
-    ereport(INFO, errmsg("finish init commands"));
+    cache_log(CACHE_INFO, "finish init commands");
 
     init_cache();
-    ereport(INFO, errmsg("finish init cache"));
+    cache_log(CACHE_INFO, "finish init cache");
 
     init_cache_gc();
-    ereport(INFO, errmsg("finish init cache gc"));
+    cache_log(CACHE_INFO, "finish init cache gc");
 
     init_invalidator();
-    ereport(INFO, errmsg("finish init wal reader"));
+    cache_log(CACHE_INFO, "finish init wal reader");
 
-    ereport(INFO, errmsg("start init db worker"));
+    cache_log(CACHE_INFO, "start init db worker");
     init_db_worker();
-    ereport(INFO, errmsg("finish init db worker %d", config.worker_conf.count_worker));
+    cache_log(CACHE_INFO, "finish init db worker %d", config.worker_conf.count_worker);
 
     init_workers();
 }

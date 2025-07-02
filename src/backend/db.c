@@ -3,8 +3,6 @@
 
 #include "postgres.h"
 
-#include "utils/elog.h"
-
 #include "libpq-fe.h"
 
 #include "alloc.h"
@@ -13,6 +11,7 @@
 #include "config.h"
 #include "connection.h"
 #include "db.h"
+#include "logger.h"
 #include "storage_data.h"
 
 extern config_cache config;
@@ -130,7 +129,6 @@ static char* create_t_info_req(char* table_name) {
     return req;
 }
 
-//The server is busy. Please try again later.
 static void connect_to_db(backend* backends) {
     char* conn_info = create_conn_req();
 
@@ -189,6 +187,7 @@ column* get_uniq_column(size_t table_oid) {
     table* t = get_table_info(table_oid);
      for (int j = 0; j < t->count_column; ++j) {
         column* c = &(t->columns[j]);
+        cache_log(CACHE_INFO, "get_uniq_column: name %s unic %d", c->column_name, c->is_uniq);
         if (c->is_uniq) {
             return c;
         }
@@ -286,6 +285,8 @@ static void init_meta_data(void) {
             memcpy(t->columns[c].column_name, column_name, column_name_size );
             t->columns[c].column_name[column_name_size] = '\0';
 
+            cache_log(CACHE_INFO, "prepare_inv_cache: t->columns[%d].column_name %s uniq %c", c, t->columns[c].column_name, is_uniq[0]);
+
             if (strncmp(type, "text", 4) == 0) {
                 t->columns[c].type = STRING;
             } else if (strncmp(type, "integer", 7) == 0) {
@@ -297,9 +298,9 @@ static void init_meta_data(void) {
                 abort();
             }
 
-            if (strncmp(is_uniq, "t", 1)) {
+            if (strncmp(is_uniq, "t", 1) == 0) {
                 t->columns[c].is_uniq = true;
-            } else if (strncmp(is_uniq, "f", 1)) {
+            } else if (strncmp(is_uniq, "f", 1) == 0) {
                 t->columns[c].is_uniq = false;
             } else {
                 ereport(INFO, errmsg("init_meta_data: undefined nullable: %s", is_uniq));

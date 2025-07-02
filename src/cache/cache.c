@@ -14,8 +14,6 @@
 
 #include "postgres.h"
 
-#include "utils/elog.h"
-
 #include "alloc.h"
 #include "cache_serializer.h"
 #include "cache.h"
@@ -25,6 +23,7 @@
 #include "ht_response_type.h"
 #include "ht_table_type.h"
 #include "ht.h"
+#include "logger.h"
 #include "storage_data.h"
 
 cache* c;
@@ -72,20 +71,6 @@ static data_version* get_table_column(key_info* key_i) {
     return get_data(c->tables, &find_table);
 }
 
-
-static find_ht_data create_find_value(key_info* key_i, table_data* table_values) {
-    find_ht_data find_value;
-    find_value_key fv_key;
-
-    fv_key.key = key_i->value;
-    fv_key.key_size = key_i->value_size;
-    fv_key.table_num = table_values->uniq_num;
-
-    find_value.find_key = &fv_key;
-    find_value.hash_key = key_i->full_key;
-    find_value.hash_key_size = key_i->full_size;
-}
-
 static create_ht_data prepare_value(key_info*  key_i, cache_response* v, int value_size, int table_num, int ttl_ms) {
     create_ht_data new_value_data;
     find_value_key* f_value;
@@ -111,11 +96,13 @@ static create_ht_data prepare_value(key_info*  key_i, cache_response* v, int val
 * If the data does not exist, it returns NULL.
 */
 data_version* get_cache(key_info* key_i) {
+    cache_log(CACHE_INFO, "get_cache: START!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1");
     data_version* result;
 
     find_ht_data find_value;
     data_version* table_values_cur_v;
     table_data* table_values;
+    find_value_key fv_key;
 
     table_values_cur_v = get_table_column(key_i);
     if (table_values_cur_v == NULL) {
@@ -123,14 +110,20 @@ data_version* get_cache(key_info* key_i) {
     }
     table_values = table_values_cur_v->value;
 
-    find_value = create_find_value(key_i, table_values);
+    fv_key.key = key_i->value;
+    fv_key.key_size = key_i->value_size;
+    fv_key.table_num = table_values->uniq_num;
+
+    find_value.find_key = &fv_key;
+    find_value.hash_key = key_i->full_key;
+    find_value.hash_key_size = key_i->full_size;
+
     result = get_data(c->values, &find_value);
     drop_version(table_values_cur_v);
     return result;
 }
 
 static data_version* get_or_create_table(key_info* key_i) {
-
     data_version* t_values_cur_v = get_table_column(key_i);
     while (t_values_cur_v == NULL) {
         create_ht_data new_table_data;
@@ -164,30 +157,43 @@ static data_version* get_or_create_table(key_info* key_i) {
 * If it does, the data is updated; if not, new data is added.
 */
 void set_cache(key_info* key_i, cache_response* v, int value_size, int ttl_ms) {
+    cache_log(CACHE_INFO, "set_cache: START!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1");
     data_version* t_values_cur_v = get_or_create_table(key_i);
     table_data* t_values = t_values_cur_v->value;
     create_ht_data new_value_data = prepare_value(key_i, v, value_size, t_values->uniq_num, ttl_ms);
-
     set_data(c->values, &new_value_data);
     drop_version(t_values_cur_v);
 }
 
 
 ht_data* prepare_inv_cache(key_info* key_i, size_t xid) {
+    cache_log(CACHE_INFO, "prepare_inv_cache: start xid %ld", xid);
+
     ht_data* result;
     data_version* table_values_cur_v;
     table_data* table_values;
     find_ht_data find_value;
+    find_value_key fv_key;
 
     table_values_cur_v = get_table_column(key_i);
     if (table_values_cur_v == NULL) {
+        cache_log(CACHE_INFO, "prepare_inv_cache: table column is NULL %s", key_i->table_column);
         return NULL;
     }
 
     table_values = table_values_cur_v->value;
 
-    find_value = create_find_value(key_i, table_values);
+  
 
+    fv_key.key = key_i->value;
+    fv_key.key_size = key_i->value_size;
+    fv_key.table_num = table_values->uniq_num;
+
+    find_value.find_key = &fv_key;
+    find_value.hash_key = key_i->full_key;
+    find_value.hash_key_size = key_i->full_size;
+
+    cache_log(CACHE_INFO, "prepare_inv_cache: key_i->value %s", key_i->value);
     result = prepare_invalidate(c->values, &find_value, xid);
     drop_version(table_values_cur_v);
     return result;

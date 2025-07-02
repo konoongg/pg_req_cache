@@ -328,7 +328,7 @@ def test_event_invalid_table_tt(create_and_drop_db, cleanup_schema):
             f"found: None"
         )
 
-        time.sleep(1)
+        time.sleep(20)
 
         # Verify data is still accessible after TTL expiration
         updated_expected_data = [updated_values[columns[0]], updated_values[columns[1]]]

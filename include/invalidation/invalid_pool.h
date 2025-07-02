@@ -10,7 +10,7 @@ typedef struct xid_invalidate xid_invalidate;
 
 bool check_inv_xid(size_t xid);
 void add_xid_event(key_info* key_i, size_t xid, ht_data* data);
-void delete_xid(xid_invalidate* cur);
+void finish_inv_pool(void);
 void init_inv_pool(void);
 void process_apply(size_t xid);
 void process_reset(size_t xid);

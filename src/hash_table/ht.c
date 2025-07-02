@@ -5,12 +5,11 @@
 
 #include "postgres.h"
 
-#include "utils/elog.h"
-
 #include "alloc.h"
 #include "config.h"
 #include "ht.h"
 #include "invalid_pool.h"
+#include "logger.h"
 
 #define write_lock false
 #define read_lock true
@@ -21,21 +20,17 @@
 
 extern config_cache config;
 
-
-static ht_data* set_data_without_lock(hash_table* ht, ht_basket* basket, create_ht_data* new_data);
-
-
 static void basket_lock(ht_basket* basket, bool is_read_lock) {
     if (is_read_lock) {
         int err = pthread_rwlock_rdlock(basket->lock);
         if (err != 0) {
-            ////ereport(INFO, errmsg("basket_lock: pthread_rwlock_rdlock() failed: %s\n", strerror(err)));
+            cache_log(CACHE_ERROR, "basket_lock: pthread_rwlock_rdlock() failed: %s\n", strerror(err));
             abort();
         }
     } else {
         int err = pthread_rwlock_wrlock(basket->lock);
         if (err != 0) {
-            ////ereport(INFO, errmsg("basket_lock: pthread_rwlock_rdlock() failed: %s\n", strerror(err)));
+            cache_log(CACHE_ERROR, "basket_lock: pthread_rwlock_rdlock() failed: %s\n", strerror(err));
             abort();
         }
     }
@@ -44,7 +39,7 @@ static void basket_lock(ht_basket* basket, bool is_read_lock) {
 static void basket_unlock(ht_basket* basket) {
     int err = pthread_rwlock_unlock(basket->lock);
     if (err != 0) {
-        ////ereport(INFO, errmsg("basket_lock: pthread_rwlock_unlock() failed: %s\n", strerror(err)));
+        cache_log(CACHE_ERROR, "basket_lock: pthread_rwlock_unlock() failed: %s\n", strerror(err));
         abort();
     }
 }
@@ -86,8 +81,10 @@ static ht_data* find_data_in_basket(hash_table* ht, ht_basket* basket, void* fin
     while (data != NULL) {
         if (ht->cmp_key(data->find_key, find_key)) {
 
-            if (check_invalidate(data)) {
+            cache_log(CACHE_DEBUG, "find_data_in_basket: FOUND");
+            if (take_tll && check_invalidate(data)) {
                 atomic_store(&(data->invalidated), true);
+                cache_log(CACHE_DEBUG, "find_data_in_basket: INVALID data %p xid %d", data,data->xid_inv);
                 return NULL;
             }
 
@@ -105,25 +102,36 @@ static ht_data* find_data_in_basket(hash_table* ht, ht_basket* basket, void* fin
                     return NULL;
                 }
             }
+
+            cache_log(CACHE_DEBUG, "find_data_in_basket: return data %p", data);
             return data;
         }
         data = data->next;
     }
+
+    cache_log(CACHE_DEBUG, "CACHE MISS");
     return NULL;
 }
 
-static bool check_invalidate(ht_data* data) {
-    size_t xid  = atomic_load(&data->xid_inv);
-    if (xid == 0) {
-        return false;
-    }
+bool check_invalidate(ht_data* data) {
+    size_t xid  = atomic_load(&(data->xid_inv));
 
-    if (atomic_load(&data->invalidated)) {
+    if (atomic_load(&(data->invalidated))) {
+
+        cache_log(CACHE_DEBUG, "check_invalidate: invalidated");
         return true;
     }
 
-    if (check_inv_xid(xid)) {
+    cache_log(CACHE_DEBUG, "check_invalidate xid: %ld", xid);
+    if (xid == 0) {
 
+        cache_log(CACHE_DEBUG, "check_invalidate xid == 0", xid);
+        return false;
+    }
+
+
+    if (!check_inv_xid(xid)) {
+        cache_log(CACHE_DEBUG, "check_invalidate mot found");
         /*
         * This check handles the race condition where:
         * 1. We read the xid
@@ -143,12 +151,15 @@ static bool check_invalidate(ht_data* data) {
         * in the common case (no ongoing invalidations).
         */
 
-        size_t xid = atomic_load(&data->xid_inv);
+        xid = atomic_load(&(data->xid_inv));
         if (xid == 0) {
             return false;
         }
+
+        cache_log(CACHE_DEBUG, "check_invalidate: xid not exist");
         return true;
     }
+    cache_log(CACHE_DEBUG, "check_invalidate no found");
     return false;
 }
 
@@ -210,7 +221,7 @@ static void free_data_from_ht(hash_table* ht, ht_basket* basket, ht_data* cur_da
     * - But we haven't yet processed the WAL notification
     */
 
-    if (all_del && atomic_load(&data->xid_inv) == 0) {
+    if (all_del && atomic_load(&(cur_data->xid_inv)) == 0) {
         free_data(ht, basket, cur_data, prev_data);
     }
 }
@@ -237,7 +248,7 @@ hash_table* create_ht(create_ht_info* info) {
         (ht->baskets[i]).lock = wcalloc(sizeof(pthread_rwlock_t));
         err = pthread_rwlock_init((ht->baskets[i]).lock, NULL);
         if (err != 0) {
-            ereport(INFO, errmsg("create_ht: pthread_rwlock_init %s", strerror(err)));
+            cache_log(CACHE_ERROR, "create_ht: pthread_rwlock_init %s", strerror(err));
             abort();
         }
     }
@@ -267,7 +278,7 @@ void destroy_ht(hash_table* ht) {
 
         err = pthread_rwlock_destroy(basket->lock);
         if (err != 0) {
-            ////ereport(INFO, errmsg("free_cache: pthread_rwlock_destroy %s", strerror(err)));
+            cache_log(CACHE_ERROR, "free_cache: pthread_rwlock_destroy %s", strerror(err));
             abort();
         }
         free((void*) basket->lock);
@@ -283,6 +294,8 @@ void drop_version(data_version* version) {
 }
 
 ht_data* prepare_invalidate(hash_table* ht, find_ht_data* find, size_t xid) {
+    cache_log(CACHE_DEBUG, "prepare_invalidate: start");
+
     ht_basket* basket;
     ht_data* data;
     basket = get_basket(ht, find->hash_key, find->hash_key_size);
@@ -291,7 +304,9 @@ ht_data* prepare_invalidate(hash_table* ht, find_ht_data* find, size_t xid) {
     data = find_data_in_basket(ht, basket, find->find_key, WITH_TLL);
 
     if (data != NULL) {
+        cache_log(CACHE_DEBUG, "prepare_invalidate: data != NULL %s", find->find_key);
         data->xid_inv = xid;
+        cache_log(CACHE_DEBUG, "prepare_invalidate: xid %d", data->xid_inv);
     }
 
     basket_unlock(basket);
@@ -299,15 +314,14 @@ ht_data* prepare_invalidate(hash_table* ht, find_ht_data* find, size_t xid) {
 }
 
 data_version* get_data(hash_table* ht, find_ht_data* find) {
-
     ht_basket* basket;
     ht_data* data;
     void* result = NULL;
 
+    cache_log(CACHE_DEBUG, "get_data key: %s", find->hash_key);
     basket = get_basket(ht, find->hash_key, find->hash_key_size);
     basket_lock(basket, read_lock);
     data = find_data_in_basket(ht, basket, find->find_key, WITH_TLL);
-
     if (data != NULL) {
         result = data->value_cur;
         atomic_fetch_add(&(data->value_cur->usage_counter), 1);
@@ -317,40 +331,15 @@ data_version* get_data(hash_table* ht, find_ht_data* find) {
     return result;
 }
 
-void invalidate_data(hash_table* ht, invalid_ht_data* inv) {
+void set_data(hash_table* ht, create_ht_data* new_data) {
     ht_basket* basket;
     ht_data* data;
+    int data_size;
 
-    basket = get_basket(ht, inv->find->hash_key, inv->find->hash_key_size);
+    basket = get_basket(ht, new_data->hash_key, new_data->hash_key_size);
+
     basket_lock(basket, write_lock);
 
-    data = find_data_in_basket(ht, basket, inv->find->find_key, WITH_TLL);
-    if (data != NULL) {
-        basket_unlock(basket);
-        return;
-    }
-
-    assert(data->invalid_save >= 0);
-
-    if (data->invalid_save == 0) {
-        if (inv->mode == INV_DELETE) {
-            data->value_cur->dirty = true;
-        } else if (inv->mode == INV_UPDATE) {
-            set_data_without_lock(ht, basket, inv->create);
-            return;
-        }
-    } else {
-        data->invalid_save--;
-    }
-
-    basket_unlock(basket);
-    return;
-}
-
-
-static ht_data* set_data_without_lock(hash_table* ht, ht_basket* basket, create_ht_data* new_data) {
-    ht_data* data;
-    int data_size;
     data = find_data_in_basket(ht, basket, new_data->find_key, WITHOUT_TLL);
     if (data == NULL) {
         if (basket->first == NULL) {
@@ -382,27 +371,17 @@ static ht_data* set_data_without_lock(hash_table* ht, ht_basket* basket, create_
     data_size = new_data->find_key_size + new_data->value_size + sizeof(ht_data);
 
     atomic_fetch_add(&(ht->cur_ht_size), data_size);
+    
+    data->invalidated = false;
+    data->xid_inv = 0;
+    data->next_inv = NULL;
 
+    cache_log(CACHE_DEBUG, "set_data: INVALID data %p xid %d", data,data->xid_inv);
     data->last_time = time(NULL);
     if (data->last_time == -1) {
-        char* err = strerror(errno);
-        ereport(INFO, errmsg("set_cache: time error  %s", err));
+        cache_log(CACHE_ERROR, "set_data: time error  %s", strerror(errno));
         abort();
     }
-    return data;
-}
-
-
-void set_data(hash_table* ht, create_ht_data* new_data) {
-    ht_basket* basket;
-    ht_data* data;
-
-    basket = get_basket(ht, new_data->hash_key, new_data->hash_key_size);
-
-    basket_lock(basket, write_lock);
-
-    data = set_data_without_lock(ht, basket, new_data);
-    //data->invalid_save++;
 
     basket_unlock(basket);
 }
@@ -433,14 +412,13 @@ void set_data_if_not_exist(hash_table* ht, create_ht_data* new_data) {
         data->value_cur->usage_counter = 0;
 
         data->xid_inv = 0;
-        data->invalidate = false;
+        data->invalidated = false;
         data->next_inv = NULL;
 
         atomic_fetch_add(&(ht->cur_ht_size), new_data->find_key_size + new_data->value_size + sizeof(ht_data));
         data->last_time = time(NULL);
         if (data->last_time == -1) {
-            char* err = strerror(errno);
-            ereport(INFO, errmsg("set_cache: time error  %s", err));
+            cache_log(CACHE_ERROR, "set_data_if_not_exist: time error  %s", strerror(errno));
             abort();
         }
     } else {
@@ -512,7 +490,7 @@ void ht_clean(hash_table* ht, int recomendate_ttl_s) {
         cur_data = basket->first;
         prev_data = NULL;
         while (cur_data != NULL) {
-            bool invalidated = cur_data->invalidated
+            bool invalidated = cur_data->invalidated;
             bool all_del = true;
             bool delete_all_version = false;
             data_version* version = cur_data->value_first;

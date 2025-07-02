@@ -14,7 +14,6 @@
 
 #include "miscadmin.h"
 #include "postmaster/interrupt.h"
-#include "utils/elog.h"
 
 #include "alloc.h"
 #include "command_processor.h"
@@ -24,6 +23,7 @@
 #include "db.h"
 #include "event.h"
 #include "io.h"
+#include "logger.h"
 #include "socket_wrapper.h"
 #include "stats.h"
 #include "worker.h"
@@ -38,7 +38,6 @@ static proc_status process_data(connection* conn);
 
 //All obtained responses are written to the connection
 static proc_status process_write(connection* conn) {
-    //ereport(INFO, errmsg("process_write: start"));
     event_data* w_data = conn->w_data;
     answer_list* answers  = (answer_list*)w_data->data;
     answer* cur_answer = answers->first;
@@ -320,7 +319,7 @@ void init_workers(void) {
     for (int i = 0; i < conf.count_worker; ++i) {
         int err = pthread_create(&(tids[i]), NULL, start_worker, NULL);
         if (err) {
-            ereport(ERROR, errmsg("init_worker: pthread_create error %s", strerror(err)));
+            cache_log(CACHE_ERROR, "init_worker: pthread_create error %s", strerror(err));
             abort();
         }
     }
@@ -328,7 +327,7 @@ void init_workers(void) {
     for (int i = 0; i < conf.count_worker; ++i) {
         int err = pthread_join(tids[i], NULL);
         if (err) {
-            ereport(ERROR, errmsg("init_worker: pthread_join error %s", strerror(err)));
+            cache_log(CACHE_ERROR, "init_worker: pthread_join error %s", strerror(err));
             abort();
         }
     }

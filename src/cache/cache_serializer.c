@@ -8,8 +8,9 @@
 
 #include "alloc.h"
 #include "cache_serializer.h"
-#include "storage_data.h"
 #include "db.h"
+#include "logger.h"
+#include "storage_data.h"
 
 extern config_cache config;
 
@@ -202,6 +203,7 @@ created_cache_respons* create_response_by_pg(PGresult* result, char* table) {
 }
 
 key_info* create_key_info_by_record(size_t table_oid, char* record) {
+    cache_log(CACHE_INFO, "create_key_info_by_record: start");
     key_info* key_i = wcalloc(sizeof(key_info));
     column* c;
     table* t;
@@ -279,7 +281,6 @@ key_info* create_key_info(char* key, int key_size) {
             }
         }
     }
-
 
     dot_position_f = strchr(key_start, '.');
     if (dot_position_f == NULL) {

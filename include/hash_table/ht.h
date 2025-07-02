@@ -15,6 +15,7 @@ typedef struct ht_basket ht_basket;
 typedef struct ht_data ht_data;
 typedef struct invalid_ht_data invalid_ht_data;
 
+bool check_invalidate(ht_data* data);
 data_version* get_data(hash_table* ht, find_ht_data* find);
 hash_table* create_ht(create_ht_info* info);
 ht_data* prepare_invalidate(hash_table* ht, find_ht_data* find, size_t xid);
@@ -23,7 +24,6 @@ size_t get_cur_size(hash_table* ht);
 void destroy_ht(hash_table* ht);
 void drop_version(data_version* version);
 void ht_clean(hash_table* ht, int recomendate_ttl_s);
-void invalidate_data(hash_table* ht, invalid_ht_data* inv);
 void set_data_if_not_exist(hash_table* ht, create_ht_data* new_data);
 void set_data(hash_table* ht, create_ht_data* new_data);
 

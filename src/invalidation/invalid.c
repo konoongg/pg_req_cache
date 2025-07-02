@@ -33,13 +33,12 @@ extern config_cache config;
 int wd;
 int wal_reader_fd;
 
-cache_invalidate* cache_inv;
 
 static void process_event(key_info* key_i, size_t xid) {
     ht_data* data = prepare_inv_cache(key_i, xid);
 
     if (data == NULL) {
-        return
+        return;
     }
     add_xid_event(key_i, xid, data);
 }
@@ -67,7 +66,7 @@ static void finish_nofier (void) {
     close(wal_reader_fd);
 }
 
-static void get_record(XLogReaderState* xlogreader) {
+static void process_update(XLogRecord*  record, XLogReaderState* xlogreader) {
 	size_t datalen;
     xl_heap_update* xlrec;
     BlockNumber newblk;
@@ -94,31 +93,26 @@ static void get_record(XLogReaderState* xlogreader) {
     datalen -= SizeOfHeapHeader;
 
     key_i = create_key_info_by_record(rlocator.relNumber, recdata);
-    if (config.c_conf.invalid_update) {
-        created_cache_respons* ccr =  create_respons_by_xlog(recdata, datalen, rlocator.relNumber);
-        invalidate_cache(key_i, ccr->res, ccr->size, INV_UPDATE);
-    } else {
-        invalidate_cache(key_i, NULL, 0, INV_DELETE);
-    }
-    return;
+    process_event(key_i, record->xl_xid);
+    destroy_key_info(key_i);
 }
 
 
-static void process_heap(XLogRecord*  record, XLogReaderState* xlogreader) {
+static void process_heap(XLogRecord* record, XLogReaderState* xlogreader) {
     char info = record->xl_info & ~XLR_INFO_MASK;
     switch (info & XLOG_HEAP_OPMASK) {
 		case XLOG_HEAP_DELETE:
 			elog(INFO, "process_heap: XLOG_HEAP_DELETE");
 			break;
 		case XLOG_HEAP_UPDATE:
-            process_update(xlogreader);
-			elog(INFO, "process_heap: XLOG_HEAP_UPDATE");
+            process_update(record, xlogreader);
+			elog(INFO, "process_heap: XLOG_HEAP_UPDATE %ld", record->xl_xid);
 			break;
 		case XLOG_HEAP_TRUNCATE:
 			elog(INFO, "process_heap: XLOG_HEAP_TRUNCATE");
 			break;
 		case XLOG_HEAP_HOT_UPDATE:
-            process_update(xlogreader);
+            process_update(record, xlogreader);
 			elog(INFO, "process_heap: XLOG_HEAP_HOT_UPDATE");
 			break;
     }
@@ -128,10 +122,11 @@ static void process_xact(XLogRecord*  record, XLogReaderState* xlogreader) {
     char info = XLogRecGetInfo(xlogreader) & XLOG_XACT_OPMASK;
     switch (info) {
         case XLOG_XACT_COMMIT:
-			elog(INFO, "process_xact: XLOG_XACT_COMMIT");
+            process_apply(record->xl_xid);
+			elog(INFO, "process_xact: XLOG_XACT_COMMIT  %ld", record->xl_xid);
             break;
         case XLOG_XACT_ABORT:
-			elog(INFO, "process_xact: XLOG_XACT_ABORT");
+            process_reset(record->xl_xid);
             break;
     }
 }
@@ -170,13 +165,6 @@ static void* start_invalidator(void* arg) {
             cur_index += EVENT_SIZE + event->len;
         }
     }
-
-    for (int i = 0; i < INVALIDATE_XID_POOL_SIZE; ++i) {
-        free(cache_inv->xid_inv[i]);
-    }
-
-    free(cache_inv->xid_inv);
-    free(cache_inv);
 
     finish_nofier();
     destroy_wal_info(wal);
