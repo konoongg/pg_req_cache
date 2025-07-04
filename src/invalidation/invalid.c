@@ -10,14 +10,15 @@
 #include "access/heapam_xlog.h"
 #include "access/xact.h"
 #include "access/xlog_internal.h"
-#include "utils/elog.h"
 
 #include "alloc.h"
 #include "cache_serializer.h"
 #include "cache.h"
 #include "config.h"
+#include "db.h"
 #include "invalid_pool.h"
 #include "invalid.h"
+#include "logger.h"
 #include "wal_reader.h"
 
 #define MAX_EVENTS 100
@@ -47,15 +48,13 @@ static void process_event(key_info* key_i, size_t xid) {
 static int init_notifier(void) {
     wal_reader_fd = inotify_init1(0);
     if (wal_reader_fd == -1) {
-        char* emsg = strerror(errno);
-        ereport(ERROR, errmsg("init_wal_reader: can't inotify_init1: %s", emsg));
+        cache_log(CACHE_ERROR,"init_wal_reader: can't inotify_init1: %s", strerror(errno));
         abort();
     }
 
-    wd = inotify_add_watch(wal_reader_fd, XLOGDIR, IN_MODIFY);
+    wd = inotify_add_watch(wal_reader_fd, XLOGDIR, IN_MODIFY | IN_CREATE);
     if (wd == -1) {
-        char* emsg = strerror(errno);
-        ereport(ERROR, errmsg("init_wal_reader: can't inotify_add_watch: %s", emsg));
+        cache_log(CACHE_ERROR,"init_wal_reader: can't inotify_add_watch: %s", strerror(errno));
         abort();
     }
     return wal_reader_fd;
@@ -78,6 +77,10 @@ static void process_update(XLogRecord*  record, XLogReaderState* xlogreader) {
     xlrec = (xl_heap_update*)XLogRecGetData(xlogreader);
     XLogRecGetBlockTag(xlogreader, 0, &rlocator, NULL, &newblk);
 
+    if (!table_filter(rlocator.relNumber)) {
+        return;
+    }
+
     if (xlrec->flags & XLH_UPDATE_PREFIX_FROM_OLD) {
 		recdata += sizeof(uint16);
         datalen -= sizeof(uint16);
@@ -93,6 +96,7 @@ static void process_update(XLogRecord*  record, XLogReaderState* xlogreader) {
     datalen -= SizeOfHeapHeader;
 
     key_i = create_key_info_by_record(rlocator.relNumber, recdata);
+
     process_event(key_i, record->xl_xid);
     destroy_key_info(key_i);
 }
@@ -102,18 +106,18 @@ static void process_heap(XLogRecord* record, XLogReaderState* xlogreader) {
     char info = record->xl_info & ~XLR_INFO_MASK;
     switch (info & XLOG_HEAP_OPMASK) {
 		case XLOG_HEAP_DELETE:
-			elog(INFO, "process_heap: XLOG_HEAP_DELETE");
+			cache_log(CACHE_INFO, "process_heap: XLOG_HEAP_DELETE");
 			break;
 		case XLOG_HEAP_UPDATE:
             process_update(record, xlogreader);
-			elog(INFO, "process_heap: XLOG_HEAP_UPDATE %ld", record->xl_xid);
+			cache_log(CACHE_INFO, "process_heap: XLOG_HEAP_UPDATE %ld", record->xl_xid);
 			break;
 		case XLOG_HEAP_TRUNCATE:
-			elog(INFO, "process_heap: XLOG_HEAP_TRUNCATE");
+			cache_log(CACHE_INFO, "process_heap: XLOG_HEAP_TRUNCATE");
 			break;
 		case XLOG_HEAP_HOT_UPDATE:
             process_update(record, xlogreader);
-			elog(INFO, "process_heap: XLOG_HEAP_HOT_UPDATE");
+			cache_log(CACHE_INFO, "process_heap: XLOG_HEAP_HOT_UPDATE");
 			break;
     }
 }
@@ -123,7 +127,7 @@ static void process_xact(XLogRecord*  record, XLogReaderState* xlogreader) {
     switch (info) {
         case XLOG_XACT_COMMIT:
             process_apply(record->xl_xid);
-			elog(INFO, "process_xact: XLOG_XACT_COMMIT  %ld", record->xl_xid);
+			cache_log(CACHE_INFO, "process_xact: XLOG_XACT_COMMIT  %ld", record->xl_xid);
             break;
         case XLOG_XACT_ABORT:
             process_reset(record->xl_xid);
@@ -150,7 +154,6 @@ static void* start_invalidator(void* arg) {
     while (true) {
         int length = read(wal_reader_fd, buffer, BUF_LEN );
         int cur_index = 0;
-
         while (cur_index < length) {
             struct inotify_event* event = (struct inotify_event*) &(buffer[cur_index]);
             if (event->len && event->mask == IN_MODIFY) {
@@ -164,6 +167,7 @@ static void* start_invalidator(void* arg) {
             }
             cur_index += EVENT_SIZE + event->len;
         }
+        cache_log(CACHE_DEBUG, "start_invalidator: process all");
     }
 
     finish_nofier();
@@ -175,7 +179,7 @@ void init_invalidator(void) {
     pthread_t wr_tid;
     int err = pthread_create(&(wr_tid), NULL, start_invalidator, NULL);
     if (err) {
-        ereport(INFO, errmsg("init_cache_gc: pthread_create error %s", strerror(err)));
+        cache_log(CACHE_ERROR,"init_cache_gc: pthread_create error %s", strerror(err));
         abort();
     }
 }

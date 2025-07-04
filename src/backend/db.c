@@ -68,8 +68,7 @@ db_oper_res read_from_db(PGconn* conn, char* t, created_cache_respons** res) {
 
         while (result != NULL) {
             if (PQresultStatus(result) == PGRES_FATAL_ERROR) {
-                const char* errorMessage = PQresultErrorMessage(result);
-                ereport(INFO, errmsg("read_from_db: bd response error  -  %s", errorMessage));
+                cache_log(CACHE_ERROR,"read_from_db: bd response error  -  %s", PQresultErrorMessage(result));
                 abort();
             }
             result = PQgetResult(conn);
@@ -89,7 +88,7 @@ static char* create_conn_req(void) {
     conn_info_size = CONN_INFO_DEFAULT_SIZE + strlen(config.db_conf.dbname) + strlen(getlogin());
     conn_info = wcalloc(conn_info_size * sizeof(char));
     if (sprintf(conn_info, "user=%s dbname=%s host=localhost", getlogin(), config.db_conf.dbname) < 0) {
-        ereport(INFO, errmsg("create_conn_req: can't create connection info"));
+        cache_log(CACHE_ERROR, "create_conn_req: can't create connection info");
         abort();
     }
     return conn_info;
@@ -122,7 +121,7 @@ static char* create_t_info_req(char* table_name) {
         "WHERE c.table_name = '%s'";
 
     if (sprintf(req, table_info, table_name) < 0) {
-        ereport(INFO, errmsg("create_t_info_req: can't create req"));
+        cache_log(CACHE_ERROR, "create_t_info_req: can't create req");
         abort();
     }
 
@@ -135,13 +134,13 @@ static void connect_to_db(backend* backends) {
     for (int i = 0; i < config.db_conf.count_backend; ++i) {
         backends[i].conn_with_db = PQconnectStart(conn_info);
         if (backends[i].conn_with_db == NULL) {
-            ereport(INFO, errmsg("connect_to_db: PQstatus is bad - %s",  PQerrorMessage(backends[i].conn_with_db)));
+            cache_log(CACHE_ERROR, "connect_to_db: PQstatus is bad - %s",  PQerrorMessage(backends[i].conn_with_db));
             finish_connects(backends);
             abort();
         }
 
         if (PQstatus(backends[i].conn_with_db) == CONNECTION_BAD) {
-            ereport(INFO, errmsg("connect_to_db: PQstatus is bad - %s",  PQerrorMessage(backends[i].conn_with_db)));
+            cache_log(CACHE_ERROR, "connect_to_db: PQstatus is bad - %s",  PQerrorMessage(backends[i].conn_with_db));
             finish_connects(backends);
             abort();
         }
@@ -173,9 +172,15 @@ column* get_column_info(char* table_name, char* column_name) {
     return NULL;
 }
 
+bool table_filter(size_t oid) {
+    return get_table_info(oid);
+}
+
 table* get_table_info(size_t oid) {
+    cache_log(CACHE_INFO, "get_table_info: meta->count_tables %d", meta->count_tables);
      for (int i = 0; i < meta->count_tables; ++i) {
         table* t  = &(meta->tables[i]);
+        cache_log(CACHE_INFO, "get_table_info: t->oid %d", t->oid);
         if (t->oid == oid) {
             return t;
         }
@@ -210,13 +215,16 @@ static void init_meta_data(void) {
     query = "SELECT tablename FROM pg_tables WHERE schemaname = 'public';";
     res = PQexec(conn, query);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
-        ereport(INFO, errmsg("SELECT failed: %s", PQerrorMessage(conn)));
+            cache_log(CACHE_ERROR, "init db meta data: SELECT failed: %s", PQerrorMessage(conn));
         PQclear(res);
         PQfinish(conn);
         abort();
     }
 
     meta->count_tables = PQntuples(res);
+
+    cache_log(CACHE_DEBUG, "cache find %d tables", meta->count_tables);
+
 
     meta->tables = wcalloc(meta->count_tables * sizeof(table));
     for (int i = 0; i < meta->count_tables; ++i) {
@@ -240,34 +248,40 @@ static void init_meta_data(void) {
         req_oid = wcalloc(req_oid_size * sizeof(char));
         table_oid = "SELECT oid FROM pg_class WHERE relname = '%s' AND relkind = 'r'";
         if (sprintf(req_oid, table_oid, t->name) < 0) {
-            ereport(INFO, errmsg("create_t_info_req: can't create req"));
+            cache_log(CACHE_ERROR, "create_t_info_req: can't create req");
             abort();
         }
 
         res = PQexec(conn, req_oid);
+        if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+            cache_log(CACHE_ERROR, "init db meta data: SELECT failed: %s", PQerrorMessage(conn));
+            PQclear(res);
+            PQfinish(conn);
+            abort();
+        }
         free(req_oid);
         if (PQresultStatus(res) != PGRES_TUPLES_OK) {
-            ereport(INFO, errmsg("SELECT failed: %s", PQerrorMessage(conn)));
+            cache_log(CACHE_ERROR, "init db meta data: SELECT failed: %s", PQerrorMessage(conn));
             PQclear(res);
             PQfinish(conn);
             abort();
         }
 
-
         text_oid = PQgetvalue(res, 0, 0);
         t->oid  = strtoul(text_oid, &bad_int_pars, 10);
         if (*bad_int_pars != '\0' || errno == EINVAL || errno == ERANGE) {
-            ereport(INFO, errmsg("create_t_info_req: can't create req"));
+            cache_log(CACHE_ERROR,"create_t_info_req: can't create req");
             abort();
         }
 
+        cache_log(CACHE_DEBUG, "cache find text_oid %s tables",text_oid);
         PQclear(res);
 
         query_t_info = create_t_info_req(t->name);
         res = PQexec(conn, query_t_info);
         free(query_t_info);
         if (PQresultStatus(res) != PGRES_TUPLES_OK) {
-            ereport(INFO, errmsg("SELECT failed: %s", PQerrorMessage(conn)));
+            cache_log(CACHE_ERROR, "init db meta data: SELECT failed: %s", PQerrorMessage(conn));
             PQclear(res);
             PQfinish(conn);
             abort();
@@ -292,7 +306,7 @@ static void init_meta_data(void) {
             } else if (strncmp(type, "integer", 7) == 0) {
                 t->columns[c].type = INT;
             } else {
-                ereport(INFO, errmsg("init_meta_data: undefined type: %s  column_name: %s table %s", type, column_name, t->name));
+                cache_log(CACHE_ERROR, "init_meta_data: undefined type: %s  column_name: %s table %s", type, column_name, t->name);
                 PQclear(res);
                 PQfinish(conn);
                 abort();
@@ -303,7 +317,7 @@ static void init_meta_data(void) {
             } else if (strncmp(is_uniq, "f", 1) == 0) {
                 t->columns[c].is_uniq = false;
             } else {
-                ereport(INFO, errmsg("init_meta_data: undefined nullable: %s", is_uniq));
+                cache_log(CACHE_ERROR, "init_meta_data: undefined nullable: %s", is_uniq);
                 PQclear(res);
                 PQfinish(conn);
                 abort();

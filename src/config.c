@@ -5,8 +5,6 @@
 
 #include "postgres.h"
 
-#include "utils/elog.h"
-
 #include "alloc.h"
 #include "config.h"
 

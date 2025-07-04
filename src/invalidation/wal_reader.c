@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <unistd.h>
 
 #include "postgres.h"
 
@@ -7,9 +8,9 @@
 #include "access/xlogrecovery.h"
 #include "access/xlogutils.h"
 #include "pg_config.h"
-#include "utils/elog.h"
 
 #include "alloc.h"
+#include "logger.h"
 #include "wal_reader.h"
 
 
@@ -42,7 +43,7 @@ static XLogReaderState* init_XLog_reader_state(XLogRecPtr lsn)
 	private_data = (ReadLocalXLogPageNoWaitPrivate *) wcalloc(sizeof(ReadLocalXLogPageNoWaitPrivate));
 
 	xlogreader = XLogReaderAllocate(wal_segment_size, NULL,
-									XL_ROUTINE(.page_read = &read_local_xlog_page_no_wait,
+									XL_ROUTINE(.page_read = &read_local_xlog_page,
 											   .segment_open = &wal_segment_open,
 											   .segment_close = &wal_segment_close),
 									private_data);
@@ -65,23 +66,13 @@ XLogRecord* read_next_XLog_record(wal_info* wal) {
 	XLogRecPtr	first_valid_record = InvalidXLogRecPtr;
 
 	if (xlogreader->NextRecPtr == 0) {
-		while (XLogRecPtrIsInvalid(first_valid_record)) {
-			first_valid_record = XLogFindNextRecord(xlogreader, wal->start_lsn);
-			__asm__ __volatile__("pause");
-			//ereport(INFO, (errmsg("could not find a valid record after %X/%X", LSN_FORMAT_ARGS(wal->start_lsn))));
+		first_valid_record = XLogFindNextRecord(xlogreader, wal->start_lsn);
+		if (first_valid_record) {
+			cache_log(CACHE_ERROR, "read_next_XLog_record: can't find first valid record");
 		}
 	}
 
 	record = XLogReadRecord(xlogreader, &errormsg);
-	if (record == NULL)	{
-		if (errormsg) {
-            ereport(ERROR, (errcode_for_file_access(),  errmsg("could not read WAL at %X/%X: %s", LSN_FORMAT_ARGS(xlogreader->EndRecPtr), errormsg)));
-            abort();
-        } else {
-			__asm__ __volatile__("pause");
-			record = XLogReadRecord(xlogreader, &errormsg);
-        }
-	}
 	return record;
 }
 

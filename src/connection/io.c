@@ -2,8 +2,6 @@
 
 #include "postgres.h"
 
-#include "utils/elog.h"
-
 #include "io.h"
 
 void answer_free(void* data) {

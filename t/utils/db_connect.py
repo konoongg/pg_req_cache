@@ -89,6 +89,7 @@ def open_table(db_name):
         dbname=db_name, host="localhost"
     )
     cursor = conn.cursor()
+    cursor.connection.autocommit = True
     return cursor
 
 def create_socket():

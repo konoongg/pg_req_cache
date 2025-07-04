@@ -96,7 +96,6 @@ static create_ht_data prepare_value(key_info*  key_i, cache_response* v, int val
 * If the data does not exist, it returns NULL.
 */
 data_version* get_cache(key_info* key_i) {
-    cache_log(CACHE_INFO, "get_cache: START!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1");
     data_version* result;
 
     find_ht_data find_value;
@@ -157,7 +156,6 @@ static data_version* get_or_create_table(key_info* key_i) {
 * If it does, the data is updated; if not, new data is added.
 */
 void set_cache(key_info* key_i, cache_response* v, int value_size, int ttl_ms) {
-    cache_log(CACHE_INFO, "set_cache: START!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1");
     data_version* t_values_cur_v = get_or_create_table(key_i);
     table_data* t_values = t_values_cur_v->value;
     create_ht_data new_value_data = prepare_value(key_i, v, value_size, t_values->uniq_num, ttl_ms);
@@ -167,7 +165,6 @@ void set_cache(key_info* key_i, cache_response* v, int value_size, int ttl_ms) {
 
 
 ht_data* prepare_inv_cache(key_info* key_i, size_t xid) {
-    cache_log(CACHE_INFO, "prepare_inv_cache: start xid %ld", xid);
 
     ht_data* result;
     data_version* table_values_cur_v;
@@ -177,13 +174,11 @@ ht_data* prepare_inv_cache(key_info* key_i, size_t xid) {
 
     table_values_cur_v = get_table_column(key_i);
     if (table_values_cur_v == NULL) {
-        cache_log(CACHE_INFO, "prepare_inv_cache: table column is NULL %s", key_i->table_column);
         return NULL;
     }
 
     table_values = table_values_cur_v->value;
 
-  
 
     fv_key.key = key_i->value;
     fv_key.key_size = key_i->value_size;
@@ -193,7 +188,6 @@ ht_data* prepare_inv_cache(key_info* key_i, size_t xid) {
     find_value.hash_key = key_i->full_key;
     find_value.hash_key_size = key_i->full_size;
 
-    cache_log(CACHE_INFO, "prepare_inv_cache: key_i->value %s", key_i->value);
     result = prepare_invalidate(c->values, &find_value, xid);
     drop_version(table_values_cur_v);
     return result;

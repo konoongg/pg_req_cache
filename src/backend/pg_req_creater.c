@@ -2,8 +2,6 @@
 
 #include "postgres.h"
 
-#include "utils/elog.h"
-
 #include "alloc.h"
 #include "cache_serializer.h"
 #include "pg_req_creater.h"

@@ -3,8 +3,6 @@
 
 #include "postgres.h"
 
-#include "utils/elog.h"
-
 #include "config.h"
 #include "hash.h"
 

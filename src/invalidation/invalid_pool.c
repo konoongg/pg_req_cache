@@ -6,7 +6,6 @@
 
 #include "postgres.h"
 
-#include "utils/elog.h"
 
 #include "alloc.h"
 #include "cache_serializer.h"
@@ -23,13 +22,13 @@ static void inv_lock(invalidate* inv, bool is_read_lock) {
     if (is_read_lock) {
         int err = pthread_rwlock_rdlock(inv->lock);
         if (err != 0) {
-            ereport(INFO, errmsg("inv_lock: pthread_rwlock_rdlock() failed: %s\n", strerror(err)));
+            cache_log(CACHE_ERROR, "inv_lock: pthread_rwlock_rdlock() failed: %s\n", strerror(err));
             abort();
         }
     } else {
         int err = pthread_rwlock_wrlock(inv->lock);
         if (err != 0) {
-            ereport(INFO, errmsg("inv_lock: pthread_rwlock_rdlock() failed: %s\n", strerror(err)));
+            cache_log(CACHE_ERROR, "inv_lock: pthread_rwlock_rdlock() failed: %s\n", strerror(err));
             abort();
         }
     }
@@ -38,20 +37,17 @@ static void inv_lock(invalidate* inv, bool is_read_lock) {
 static void inv_unlock(invalidate* inv) {
     int err = pthread_rwlock_unlock(inv->lock);
     if (err != 0) {
-        ereport(INFO, errmsg("inv_unlock: pthread_rwlock_unlock() failed: %s\n", strerror(err)));
+        cache_log(CACHE_ERROR, "inv_unlock: pthread_rwlock_unlock() failed: %s\n", strerror(err));
         abort();
     }
 }
 
 static void delete_xid(xid_invalidate* cur) {
     int index = cur->xid % INVALIDATE_XID_POOL_SIZE;
-    cache_log(CACHE_DEBUG, "delete_xid: xid %ld", cur->xid);
 
     xid_invalidate* next = cur->next;
     xid_invalidate* prev = cur->prev;
 
-
-    cache_log(CACHE_DEBUG, "delete_xid: next %p prev %p", next, prev);
 
     if (prev) {
         cur->prev->next = next;
@@ -65,18 +61,13 @@ static void delete_xid(xid_invalidate* cur) {
         (cache_inv->xid_inv[index]).last = prev;
     }
 
-
-    cache_log(CACHE_DEBUG, "delete_xid: cache_inv->xid_inv->first %p", cache_inv->xid_inv->first);
-
     free(cur);
 }
 
 static xid_invalidate* find_xid(invalidate* xid_inv, size_t xid) {
-    cache_log(CACHE_DEBUG, "find_xid START");
     xid_invalidate* cur = xid_inv->first;
 
     while (cur != NULL) {
-        cache_log(CACHE_DEBUG, "find_xid: xid_inv->first %p xid_inv->first->next %p xid %ld", xid_inv->first,  xid_inv->first->next, xid_inv->first->xid);
         if (cur->xid == xid) {
             return cur;
         }
@@ -94,7 +85,7 @@ void init_inv_pool(void) {
         (cache_inv->xid_inv[i]).lock = wcalloc(sizeof(pthread_rwlock_t));
         err = pthread_rwlock_init((cache_inv->xid_inv[i]).lock, NULL);
         if (err != 0) {
-            ereport(INFO, errmsg("init_inv_pool: pthread_rwlock_init %s", strerror(err)));
+            cache_log(CACHE_ERROR, "init_inv_pool: pthread_rwlock_init %s", strerror(err));
             abort();
         }
     }
@@ -104,7 +95,7 @@ void finish_inv_pool(void) {
     for (int i = 0; i < INVALIDATE_XID_POOL_SIZE; ++i) {
         int err = pthread_rwlock_destroy((cache_inv->xid_inv[i]).lock);
         if (err != 0) {
-            ereport(INFO, errmsg("finish_inv_pool: pthread_rwlock_destroy %s", strerror(err)));
+            cache_log(CACHE_ERROR, "finish_inv_pool: pthread_rwlock_destroy %s", strerror(err));
             abort();
         }
         free((cache_inv->xid_inv[i]).lock);
@@ -129,8 +120,6 @@ bool check_inv_xid(size_t xid) {
 }
 
 void add_xid_event(key_info* key_i, size_t xid, ht_data* data) {
-    cache_log(CACHE_DEBUG, "add_xid_event: start xid %ld", xid);
-
     int index = xid % INVALIDATE_XID_POOL_SIZE;
     invalidate* xid_inv = &(cache_inv->xid_inv[index]);
     xid_invalidate* last;
@@ -138,7 +127,6 @@ void add_xid_event(key_info* key_i, size_t xid, ht_data* data) {
     if (xid_inv->first == NULL) {
         xid_inv->first = xid_inv->last = wcalloc(sizeof(xid_invalidate));
         xid_inv->first->prev = NULL;
-        cache_log(CACHE_DEBUG, "add_xid_event: xid_inv->first  %p", xid_inv->first);
     } else {
         xid_inv->last->next = wcalloc(sizeof(xid_invalidate));
         xid_inv->last->next->prev = xid_inv->last;
@@ -148,9 +136,6 @@ void add_xid_event(key_info* key_i, size_t xid, ht_data* data) {
 
     last->next = NULL;
     last->xid = xid;
-
-    cache_log(CACHE_DEBUG, "add_xid_event: xid_inv->last %p xid_inv->last->next %p xid %ld", xid_inv->last,  xid_inv->last->next, xid_inv->last->xid);
-    cache_log(CACHE_DEBUG, "add_xid_event: xid_inv->last %p last->next %p xid %ld", xid_inv->last,  last->next, last->xid);
 
     atomic_store(&(data->xid_inv), xid);
 
@@ -202,7 +187,7 @@ void process_reset(size_t xid) {
         while (cur_data != NULL) {
             ht_data* next = cur_data->next_inv;
             cur_data->xid_inv = 0;
-            cur_data->next_inv->next_inv = NULL;
+            cur_data->next_inv = NULL;
             cur_data = next;
         }
 

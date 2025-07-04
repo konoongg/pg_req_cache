@@ -294,8 +294,6 @@ void drop_version(data_version* version) {
 }
 
 ht_data* prepare_invalidate(hash_table* ht, find_ht_data* find, size_t xid) {
-    cache_log(CACHE_DEBUG, "prepare_invalidate: start");
-
     ht_basket* basket;
     ht_data* data;
     basket = get_basket(ht, find->hash_key, find->hash_key_size);
@@ -304,9 +302,7 @@ ht_data* prepare_invalidate(hash_table* ht, find_ht_data* find, size_t xid) {
     data = find_data_in_basket(ht, basket, find->find_key, WITH_TLL);
 
     if (data != NULL) {
-        cache_log(CACHE_DEBUG, "prepare_invalidate: data != NULL %s", find->find_key);
         data->xid_inv = xid;
-        cache_log(CACHE_DEBUG, "prepare_invalidate: xid %d", data->xid_inv);
     }
 
     basket_unlock(basket);
@@ -318,7 +314,6 @@ data_version* get_data(hash_table* ht, find_ht_data* find) {
     ht_data* data;
     void* result = NULL;
 
-    cache_log(CACHE_DEBUG, "get_data key: %s", find->hash_key);
     basket = get_basket(ht, find->hash_key, find->hash_key_size);
     basket_lock(basket, read_lock);
     data = find_data_in_basket(ht, basket, find->find_key, WITH_TLL);
@@ -376,7 +371,6 @@ void set_data(hash_table* ht, create_ht_data* new_data) {
     data->xid_inv = 0;
     data->next_inv = NULL;
 
-    cache_log(CACHE_DEBUG, "set_data: INVALID data %p xid %d", data,data->xid_inv);
     data->last_time = time(NULL);
     if (data->last_time == -1) {
         cache_log(CACHE_ERROR, "set_data: time error  %s", strerror(errno));

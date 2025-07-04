@@ -11,8 +11,7 @@
 
 #include "postgres.h"
 
-#include "utils/elog.h"
-
+#include "logger.h"
 #include "socket_wrapper.h"
 
 int socket_set_nonblock(int socket_fd);
@@ -38,12 +37,12 @@ int init_listen_socket(int listen_port, int backlog_size) {
 
     if (listen_socket == -1) {
         char* err = strerror(errno);
-        ereport(INFO, errmsg("init_listen_socket: err socket - %s", err));
+        cache_log(CACHE_WARNING, "init_listen_socket: err socket - %s", err);
         return -1;
     }
 
     if (socket_set_nonblock(listen_socket) == -1) {
-        ereport(INFO, errmsg("init_listen_socket: for listen socket set nonblocking mode fail"));
+        cache_log(CACHE_WARNING, "init_listen_socket: for listen socket set nonblocking mode fail");
         return -1;
     }
 
@@ -55,32 +54,31 @@ int init_listen_socket(int listen_port, int backlog_size) {
     err = setsockopt(listen_socket, SOL_SOCKET, SO_REUSEPORT, &val, sizeof(val));
 	if (err == -1) {
         char* err_msg  =  strerror(errno);
-        ereport(INFO, errmsg("setsockopt: %s", err_msg));
+        cache_log(CACHE_WARNING, "setsockopt: %s", err_msg);
         return -1;
     }
 
     err = bind(listen_socket, (struct sockaddr *)&sockaddr, sizeof(sockaddr));
     if (err == -1) {
         char* err_msg =  strerror(errno);
-        ereport(INFO, errmsg("init_listen_socket: bind error -  %s %d", err_msg, listen_socket));
+        cache_log(CACHE_WARNING, "init_listen_socket: bind error -  %s %d", err_msg, listen_socket);
         return -1;
     }
 
     err = listen(listen_socket, backlog_size);
     if (err == -1) {
         char* err_msg  =  strerror(errno);
-        ereport(INFO, errmsg("init_listen_socket: listen error - %s", err_msg));
+        cache_log(CACHE_WARNING, "init_listen_socket: listen error - %s", err_msg);
         return -1;
     }
 
-    //ereport(INFO, errmsg("init listen socket"));
     return listen_socket;
 }
 
 //configure socket, use saved listen_socket
 int init_socket (int socket_fd) {
     if (socket_set_nonblock(socket_fd) == -1) {
-        ereport(WARNING, errmsg("for listen socket set nonblocking mode fail"));
+        cache_log(CACHE_WARNING, "for listen socket set nonblocking mode fail");
         return -1;
     }
     return 0;

@@ -3,8 +3,6 @@
 
 #include "postgres.h"
 
-#include "utils/elog.h"
-
 #include "alloc.h"
 #include "connection.h"
 #include "data_parser.h"

@@ -6,11 +6,10 @@
 
 #include "postgres.h"
 
-#include "utils/elog.h"
-
 #include "alloc.h"
 #include "connection.h"
 #include "event.h"
+#include "logger.h"
 
 // Adding an element to the event list.
 static void add(connection* conn, conn_list* list) {
@@ -50,7 +49,7 @@ static void delete(connection* conn, conn_list* list) {
 void add_active(connection* conn) {
     int err = pthread_spin_lock(conn->wthrd->lock);
     if (err != 0) {
-        ereport(INFO, errmsg("add_active: pthread_spin_lock %s", strerror(err)));
+        cache_log(CACHE_ERROR, "add_active: pthread_spin_lock %s", strerror(err));
         abort();
     }
 
@@ -61,7 +60,7 @@ void add_active(connection* conn) {
 
     err = pthread_spin_unlock(conn->wthrd->lock);
     if (err != 0) {
-        ereport(INFO, errmsg("add_active: pthread_spin_unlock %s", strerror(err)));
+        cache_log(CACHE_ERROR, "add_active: pthread_spin_unlock %s", strerror(err));
         abort();
     }
 }
@@ -69,7 +68,7 @@ void add_active(connection* conn) {
 void delete_active(connection* conn) {
     int err = pthread_spin_lock(conn->wthrd->lock);
     if (err != 0) {
-        ereport(INFO, errmsg("delete_active: pthread_spin_lock %s", strerror(err)));
+        cache_log(CACHE_ERROR, "delete_active: pthread_spin_lock %s", strerror(err));
         abort();
     }
 
@@ -78,7 +77,7 @@ void delete_active(connection* conn) {
 
     err = pthread_spin_unlock(conn->wthrd->lock);
     if (err != 0) {
-        ereport(INFO, errmsg("delete_active: pthread_spin_unlock %s", strerror(err)));
+        cache_log(CACHE_ERROR, "delete_active: pthread_spin_unlock %s", strerror(err));
         abort();
     }
 }
@@ -87,7 +86,7 @@ void add_wait(connection* conn) {
 
     int err = pthread_spin_lock(conn->wthrd->lock);
     if (err != 0) {
-        ereport(INFO, errmsg("add_wait: pthread_spin_lock %s", strerror(err)));
+        cache_log(CACHE_ERROR, "add_wait: pthread_spin_lock %s", strerror(err));
         abort();
     }
 
@@ -97,7 +96,7 @@ void add_wait(connection* conn) {
 
     err = pthread_spin_unlock(conn->wthrd->lock);
     if (err != 0) {
-        ereport(INFO, errmsg("add_wait: pthread_spin_unlock %s", strerror(err)));
+        cache_log(CACHE_ERROR, "add_wait: pthread_spin_unlock %s", strerror(err));
         abort();
     }
 }
@@ -107,7 +106,7 @@ void delete_wait(connection* conn) {
 
     int err = pthread_spin_lock(conn->wthrd->lock);
     if (err != 0) {
-        ereport(INFO, errmsg("delete_wait: pthread_spin_lock %s", strerror(err)));
+        cache_log(CACHE_ERROR, "delete_wait: pthread_spin_lock %s", strerror(err));
         abort();
     }
 
@@ -116,7 +115,7 @@ void delete_wait(connection* conn) {
 
     err = pthread_spin_unlock(conn->wthrd->lock);
     if (err != 0) {
-        ereport(INFO, errmsg("delete_wait: pthread_spin_unlock %s", strerror(err)));
+        cache_log(CACHE_ERROR, "delete_wait: pthread_spin_unlock %s", strerror(err));
         abort();
     }
 }
@@ -124,7 +123,7 @@ void delete_wait(connection* conn) {
 void move_from_active_to_wait(connection* conn) {
     int err = pthread_spin_lock(conn->wthrd->lock);
     if (err != 0) {
-        ereport(INFO, errmsg("move_from_active_to_wait: pthread_spin_lock %s", strerror(err)));
+        cache_log(CACHE_ERROR, "move_from_active_to_wait: pthread_spin_lock %s", strerror(err));
         abort();
     }
 
@@ -137,7 +136,7 @@ void move_from_active_to_wait(connection* conn) {
 
     err = pthread_spin_unlock(conn->wthrd->lock);
     if (err != 0) {
-        ereport(INFO, errmsg("move_from_active_to_wait: pthread_spin_unlock %s", strerror(err)));
+        cache_log(CACHE_ERROR, "move_from_active_to_wait: pthread_spin_unlock %s", strerror(err));
         abort();
     }
 }
@@ -146,7 +145,7 @@ void move_from_active_to_wait(connection* conn) {
 void move_from_wait_to_active(connection* conn) {
     int err = pthread_spin_lock(conn->wthrd->lock);
     if (err != 0) {
-        ereport(INFO, errmsg("move_from_wait_to_active: pthread_spin_lock %s", strerror(err)));
+        cache_log(CACHE_ERROR, "move_from_wait_to_active: pthread_spin_lock %s", strerror(err));
         abort();
     }
 
@@ -159,7 +158,7 @@ void move_from_wait_to_active(connection* conn) {
 
     err = pthread_spin_unlock(conn->wthrd->lock);
     if (err != 0) {
-        ereport(INFO, errmsg("move_from_wait_to_active: pthread_spin_unlock %s", strerror(err)));
+        cache_log(CACHE_ERROR, "move_from_wait_to_active: pthread_spin_unlock %s", strerror(err));
         abort();
     }
 }
@@ -195,7 +194,7 @@ void free_connection(connection* conn) {
 
     if (close(conn->fd) == -1) {
         char* err_msg = strerror(errno);
-        ereport(INFO, errmsg("process_close: close() failed: %s\n", err_msg));
+         cache_log(CACHE_ERROR, "process_close: close() failed: %s\n", err_msg);
         abort();
     }
 
@@ -220,7 +219,7 @@ void init_wthread(wthread* wthrd) {
 
     err = pthread_spin_init(wthrd->lock, PTHREAD_PROCESS_PRIVATE);
     if (err != 0) {
-        ereport(INFO, errmsg("init_wthread: pthread_spin_lock %s", strerror(err)));
+         cache_log(CACHE_ERROR, "init_wthread: pthread_spin_lock %s", strerror(err));
         abort();
     }
 }
@@ -228,7 +227,7 @@ void init_wthread(wthread* wthrd) {
 static void conn_list_lock(wthread* wthrd) {
     int err = pthread_spin_lock(wthrd->lock);
     if (err != 0) {
-        ereport(INFO, errmsg("conn_list_lock: pthread_spin_lock %s", strerror(err)));
+         cache_log(CACHE_ERROR, "conn_list_lock: pthread_spin_lock %s", strerror(err));
         abort();
     }
 }
@@ -236,7 +235,7 @@ static void conn_list_lock(wthread* wthrd) {
 static void conn_list_unlock(wthread* wthrd) {
     int err = pthread_spin_unlock(wthrd->lock);
     if (err != 0) {
-        ereport(INFO, errmsg("conn_list_unlock: pthread_spin_unlock %s", strerror(err)));
+         cache_log(CACHE_ERROR, "conn_list_unlock: pthread_spin_unlock %s", strerror(err));
         abort();
     }
 }
@@ -293,7 +292,7 @@ void event_notify(e_notify* not) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 continue;
             }
-            ereport(INFO, errmsg("event_notify fd %d: write %s", not->pipe_fd[1], err));
+             cache_log(CACHE_ERROR, "event_notify fd %d: write %s", not->pipe_fd[1], err);
             abort();
         }
         break;
@@ -305,7 +304,7 @@ not_status event_get_notify(e_notify* not) {
     int res = read(not->pipe_fd[0], &code, 1);
     if (res < 0 && res != EAGAIN) {
         char* err = strerror(errno);
-        ereport(INFO, errmsg("notify: read error %s", err));
+         cache_log(CACHE_ERROR, "notify: read error %s", err);
         abort();
     } else if ( res == EAGAIN) {
         return NOT_TA;
@@ -319,7 +318,7 @@ int create_ev_notify(wthread* wthrd) {
     wthrd->not = wcalloc(sizeof(e_notify));
     err = pipe(wthrd->not->pipe_fd);
     if (err == -1) {
-        ereport(INFO, errmsg("init_notify: pipe error %s", strerror(err)));
+        cache_log(CACHE_ERROR, "init_notify: pipe error %s", strerror(err));
         abort();
     }
     return wthrd->not->pipe_fd[0];

@@ -39,6 +39,28 @@ def test_simple_get_table_tt(create_and_drop_db, cleanup_schema):
     assert get_response == expected_get_response, \
         f"Ожидался ответ {expected_get_response}, но получен: {get_response}"
 
+
+def test_no_exist_get_table_tt(create_and_drop_db, cleanup_schema):
+    db_name = create_and_drop_db
+    table_name, columns = create_table_text_text(db_name)
+    restart_postgres()
+    cursor = open_table(db_name)
+    sock = create_socket()
+
+    kv = {
+        columns[0]: "test1",
+        columns[1]: "test2"
+    }
+
+    key = create_key(table_name, columns[0], "test1")
+    command = create_resp_req(" ".join(["get", key]))
+    expected_get_response = create_resp_array(None)
+    sock.sendall(command)
+    get_response = sock.recv(1024)
+    assert get_response == expected_get_response, \
+        f"Ожидался ответ {expected_get_response}, но получен: {get_response}"
+
+
 def test_double_get_table_tt(create_and_drop_db, cleanup_schema):
     db_name = create_and_drop_db
     table_name, columns = create_table_text_text(db_name)

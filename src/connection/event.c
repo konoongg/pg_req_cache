@@ -3,12 +3,11 @@
 
 #include "postgres.h"
 
-#include "utils/elog.h"
-
 #include "alloc.h"
 #include "config.h"
 #include "connection.h"
 #include "event.h"
+#include "logger.h"
 
 extern config_cache config;
 
@@ -55,7 +54,7 @@ event_loop* init_loop(void) {
 
     l->loop = ev_loop_new(ev_recommended_backends());
     if (l->loop  == NULL) {
-        ereport(INFO, errmsg("init_loop: cannot create libev default loop"));
+        cache_log(CACHE_ERROR, "init_loop: cannot create libev default loop");
         abort();
     }
 
@@ -65,7 +64,7 @@ event_loop* init_loop(void) {
 void loop_run(event_loop* l) {
     bool run = ev_run((struct ev_loop*)(l->loop), EVRUN_ONCE);
     if (!run) {
-        ereport(INFO, errmsg("loop_run: ev_run return false"));
+        cache_log(CACHE_ERROR, "loop_run: ev_run return false");
         abort();
     }
 }

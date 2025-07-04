@@ -2,8 +2,6 @@
 
 #include "postgres.h"
 
-#include "utils/elog.h"
-
 #include "libpq-fe.h"
 
 #include "alloc.h"
@@ -100,7 +98,7 @@ created_cache_respons* create_response_by_resp(char* table, char* value, int val
             column_name[attr_name_size] = '\0';
             res->columns[cur_count_attr] = get_column_info(table, column_name);
             if (res->columns[cur_count_attr] == NULL) {
-                ereport(INFO, errmsg("create_response_by_resp: table: %s coulumn %s not found", table, column_name));
+                cache_log(CACHE_ERROR, "create_response_by_resp: table: %s coulumn %s not found", table, column_name);
                 abort();
             }
             free(column_name);
@@ -148,7 +146,7 @@ created_cache_respons* create_response_by_pg(PGresult* result, char* table) {
         }
         res->columns[column] = get_column_info(table, column_name);
         if (res->columns[column] == NULL) {
-            ereport(INFO, errmsg("create_response_by_resp: table: %s coulumn %s not found", table, column_name));
+            cache_log(CACHE_ERROR, "create_response_by_resp: table: %s coulumn %s not found", table, column_name);
             abort();
         }
     }
@@ -203,7 +201,6 @@ created_cache_respons* create_response_by_pg(PGresult* result, char* table) {
 }
 
 key_info* create_key_info_by_record(size_t table_oid, char* record) {
-    cache_log(CACHE_INFO, "create_key_info_by_record: start");
     key_info* key_i = wcalloc(sizeof(key_info));
     column* c;
     table* t;
@@ -212,6 +209,12 @@ key_info* create_key_info_by_record(size_t table_oid, char* record) {
     key_i->direct = false;
 
     t = get_table_info(table_oid);
+    if (t == NULL) {
+        cache_log(CACHE_ERROR, "create_key_info_by_record: wrong table oid %d", table_oid);
+        abort();
+    }
+
+
     key_i->table_size = strlen(t->name);
     key_i->table = wcalloc( (key_i->table_size + 1) * sizeof(char));
     memcpy(key_i->table, t->name, key_i->table_size);

@@ -16,6 +16,7 @@ typedef struct backend backend;
 typedef struct db_meta_data db_meta_data;
 typedef struct table table;
 
+bool table_filter(size_t oid);
 column* get_column_info(char* table_name, char* column_name);
 column* get_uniq_column(size_t table_oid);
 db_oper_res read_from_db(PGconn* conn, char* t, created_cache_respons** req);

@@ -4,13 +4,13 @@
 #include "postgres.h"
 
 #include "miscadmin.h"
-#include "utils/elog.h"
 
 #include "alloc.h"
 #include "cache_gc.h"
 #include "cache.h"
 #include "config.h"
 #include "connection.h"
+#include "logger.h"
 
 extern config_cache config;
 cache_gc gc;
@@ -91,7 +91,7 @@ void init_cache_gc(void) {
 
     err = pthread_create(&(cache_gc_tid), NULL, start_cache_gc, NULL);
     if (err) {
-        ereport(INFO, errmsg("init_cache_gc: pthread_create error %s", strerror(err)));
+        cache_log(CACHE_ERROR, "init_cache_gc: pthread_create error %s", strerror(err));
         abort();
     }
 }

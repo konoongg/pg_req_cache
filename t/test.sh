@@ -1,5 +1,6 @@
 #!/bin/bash
-
+ulimit -c unlimited 
+sudo sysctl  -p
 clear
 export PYTHONDONTWRITEBYTECODE=1
 
