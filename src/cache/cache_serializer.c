@@ -6,8 +6,8 @@
 
 #include "alloc.h"
 #include "cache_serializer.h"
-#include "db.h"
 #include "logger.h"
+#include "meta_db.h"
 #include "storage_data.h"
 
 extern config_cache config;

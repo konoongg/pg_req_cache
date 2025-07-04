@@ -9,6 +9,7 @@ OBJS = \
 	$(WIN32RES) \
 	src/alloc.o \
 	src/backend/db.o \
+	src/backend/meta_db.o \
 	src/backend/pg_req_creater.o \
 	src/cache/cache_gc.o \
 	src/cache/cache_serializer.o \

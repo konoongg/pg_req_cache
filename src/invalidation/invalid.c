@@ -15,10 +15,10 @@
 #include "cache_serializer.h"
 #include "cache.h"
 #include "config.h"
-#include "db.h"
 #include "invalid_pool.h"
 #include "invalid.h"
 #include "logger.h"
+#include "meta_db.h"
 #include "wal_reader.h"
 
 #define MAX_EVENTS 100
