@@ -49,6 +49,8 @@ struct config_cache {
     cache_conf c_conf; // cache settings
     db_conn_conf db_conf; // connection with postgres settings
     proto_conf p_conf; // protocol settings
+
+    bool is_replica;
 };
 
 #endif

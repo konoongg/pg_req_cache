@@ -54,4 +54,8 @@ void cache_log(cache_log_level level, const char* fmt, ...) {
             free(msg);
         }
     }
+
+    if (level == CACHE_ERROR) {
+        abort();
+    }
 }

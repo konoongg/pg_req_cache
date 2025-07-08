@@ -5,6 +5,9 @@
 
 #include "postgres.h"
 
+#include "access/xlog.h"
+#include "utils/guc.h"
+
 #include "alloc.h"
 #include "config.h"
 
@@ -33,10 +36,25 @@ static void defalt_setting_init(void) {
     memcpy(config.db_conf.user, "postgres", 9);
 
     config.p_conf.delim = '.';
+    config.is_replica = RecoveryInProgress();
 }
 
 // Initialize the config value from the corresponding file.
 // If the file does not exist, set the default value for all config parameters.
 void init_config(void) {
     defalt_setting_init();
+
+    DefineCustomIntVariable("pg_req_cache.port",
+							"port for cache",
+							NULL,
+							&(config.worker_conf.listen_port),
+							6379,
+							1024, 49151,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
+
+    MarkGUCPrefixReserved("pg_req_cache");
 }

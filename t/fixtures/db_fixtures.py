@@ -4,6 +4,8 @@ from psycopg2 import sql
 
 Host = "localhost"
 DBname = "postgres"
+PORT = 5432
+USER = "postgres"
 
 import time
 import psycopg2
@@ -12,35 +14,35 @@ import pytest
 @pytest.fixture(scope="function")
 def create_and_drop_db():
     max_retries = 3
-    retry_delay = 1  # секунды
+    retry_delay = 1
     conn = None
     cursor = None
     db_name = "postgres"
-    
+
     for attempt in range(1, max_retries + 1):
         try:
             conn = psycopg2.connect(
                 dbname=DBname,
                 host=Host,
+                user = USER,
+                port = PORT,
                 connect_timeout=2
             )
             conn.autocommit = True
             cursor = conn.cursor()
 
-            # Проверяем существование базы данных
             cursor.execute("SELECT 1 FROM pg_database WHERE datname = %s", (db_name,))
             exists = cursor.fetchone()
 
             if not exists:
                 cursor.execute(f"CREATE DATABASE {db_name}")
             yield db_name
-            # Удаляем базу только если мы её создавали
             if not exists:
                 try:
                     cursor.execute(f"DROP DATABASE {db_name}")
                 except Exception as drop_error:
                     print(f"Ошибка при удалении базы данных: {drop_error}")
-            break  # Успешное выполнение, выходим из цикла
+            break
         except Exception as e:
             print(f"Ошибка при попытке #{attempt}: {str(e)}")
             if attempt < max_retries:
@@ -66,6 +68,7 @@ def cleanup_schema():
             conn = psycopg2.connect(
                 dbname=DBname,
                 host=Host,
+                user=USER,
                 connect_timeout=2
             )
             conn.autocommit = True

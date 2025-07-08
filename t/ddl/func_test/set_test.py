@@ -9,7 +9,7 @@ def test_simple_set_table_tt(create_and_drop_db, cleanup_schema):
     db_name = create_and_drop_db
     table_name, columns = create_table_text_text(db_name)
     restart_postgres()
-    cursor = open_table(db_name)
+    cursor = open_bd(db_name)
     sock = create_socket()
 
     kv = {
@@ -41,7 +41,7 @@ def test_simple_double_set_table_tt(create_and_drop_db, cleanup_schema):
     db_name = create_and_drop_db
     table_name, columns = create_table_text_text(db_name)
     restart_postgres()
-    cursor = open_table(db_name)
+    cursor = open_bd(db_name)
     sock = create_socket()
 
     kv = {
@@ -94,7 +94,7 @@ def test_simple_set_table_ti(create_and_drop_db, cleanup_schema):
     db_name = create_and_drop_db
     table_name, columns = create_table_text_int(db_name)
     restart_postgres()
-    cursor = open_table(db_name)
+    cursor = open_bd(db_name)
     sock = create_socket()
 
     kv = {

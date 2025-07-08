@@ -32,14 +32,13 @@ static char* create_t_info_req(char* table_name) {
         "            AND tc.table_schema = kcu.table_schema "
         "        WHERE tc.table_name = c.table_name "
         "            AND kcu.column_name = c.column_name "
-        "            AND tc.constraint_type = 'UNIQUE' "
-        ") AS is_unique "
+        "            AND tc.constraint_type = 'PRIMARY KEY' "
+        ") AS is_primary_key "
         "FROM information_schema.columns c "
         "WHERE c.table_name = '%s'";
 
     if (sprintf(req, table_info, table_name) < 0) {
         cache_log(CACHE_ERROR, "create_t_info_req: can't create req");
-        abort();
     }
 
     return req;
@@ -54,7 +53,6 @@ char* create_conn_req(void) {
     conn_info = wcalloc(conn_info_size * sizeof(char));
     if (sprintf(conn_info, "user=%s dbname=%s host=localhost", getlogin(), config.db_conf.dbname) < 0) {
         cache_log(CACHE_ERROR, "create_conn_req: can't create connection info");
-        abort();
     }
     return conn_info;
 }
@@ -74,10 +72,9 @@ void init_meta_data(void) {
     query = "SELECT tablename FROM pg_tables WHERE schemaname = 'public';";
     res = PQexec(conn, query);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
-            cache_log(CACHE_ERROR, "init db meta data: SELECT failed: %s", PQerrorMessage(conn));
         PQclear(res);
         PQfinish(conn);
-        abort();
+        cache_log(CACHE_ERROR, "init db meta data: SELECT failed: %s", PQerrorMessage(conn));
     }
 
     meta->count_tables = PQntuples(res);
@@ -108,29 +105,25 @@ void init_meta_data(void) {
         table_oid = "SELECT oid FROM pg_class WHERE relname = '%s' AND relkind = 'r'";
         if (sprintf(req_oid, table_oid, t->name) < 0) {
             cache_log(CACHE_ERROR, "create_t_info_req: can't create req");
-            abort();
         }
 
         res = PQexec(conn, req_oid);
         if (PQresultStatus(res) != PGRES_TUPLES_OK) {
-            cache_log(CACHE_ERROR, "init db meta data: SELECT failed: %s", PQerrorMessage(conn));
             PQclear(res);
             PQfinish(conn);
-            abort();
+            cache_log(CACHE_ERROR, "init db meta data: SELECT failed: %s", PQerrorMessage(conn));
         }
         free(req_oid);
         if (PQresultStatus(res) != PGRES_TUPLES_OK) {
-            cache_log(CACHE_ERROR, "init db meta data: SELECT failed: %s", PQerrorMessage(conn));
             PQclear(res);
             PQfinish(conn);
-            abort();
+            cache_log(CACHE_ERROR, "init db meta data: SELECT failed: %s", PQerrorMessage(conn));
         }
 
         text_oid = PQgetvalue(res, 0, 0);
         t->oid  = strtoul(text_oid, &bad_int_pars, 10);
         if (*bad_int_pars != '\0' || errno == EINVAL || errno == ERANGE) {
             cache_log(CACHE_ERROR,"create_t_info_req: can't create req");
-            abort();
         }
 
         cache_log(CACHE_DEBUG, "cache find text_oid %s tables",text_oid);
@@ -140,17 +133,16 @@ void init_meta_data(void) {
         res = PQexec(conn, query_t_info);
         free(query_t_info);
         if (PQresultStatus(res) != PGRES_TUPLES_OK) {
-            cache_log(CACHE_ERROR, "init db meta data: SELECT failed: %s", PQerrorMessage(conn));
             PQclear(res);
             PQfinish(conn);
-            abort();
+            cache_log(CACHE_ERROR, "init db meta data: SELECT failed: %s", PQerrorMessage(conn));
         }
 
         t->count_column = PQntuples(res);
         t->columns = wcalloc(t->count_column  * sizeof(column));
         for (int c = 0; c < t->count_column; ++c) {
             char* column_name = PQgetvalue(res, c, 0);
-            char* is_uniq = PQgetvalue(res, c, 3);
+            char* is_key = PQgetvalue(res, c, 3);
             char* type = PQgetvalue(res, c, 1);
             int column_name_size = PQgetlength(res, c, 0);
 
@@ -158,28 +150,24 @@ void init_meta_data(void) {
             memcpy(t->columns[c].column_name, column_name, column_name_size );
             t->columns[c].column_name[column_name_size] = '\0';
 
-            cache_log(CACHE_INFO, "prepare_inv_cache: t->columns[%d].column_name %s uniq %c", c, t->columns[c].column_name, is_uniq[0]);
-
             if (strncmp(type, "text", 4) == 0) {
                 t->columns[c].type = STRING;
             } else if (strncmp(type, "integer", 7) == 0) {
                 t->columns[c].type = INT;
             } else {
-                cache_log(CACHE_ERROR, "init_meta_data: undefined type: %s  column_name: %s table %s", type, column_name, t->name);
                 PQclear(res);
                 PQfinish(conn);
-                abort();
+                cache_log(CACHE_ERROR, "init_meta_data: undefined type: %s  column_name: %s table %s", type, column_name, t->name);
             }
 
-            if (strncmp(is_uniq, "t", 1) == 0) {
-                t->columns[c].is_uniq = true;
-            } else if (strncmp(is_uniq, "f", 1) == 0) {
-                t->columns[c].is_uniq = false;
+            if (strncmp(is_key, "t", 1) == 0) {
+                t->columns[c].is_key = true;
+            } else if (strncmp(is_key, "f", 1) == 0) {
+                t->columns[c].is_key = false;
             } else {
-                cache_log(CACHE_ERROR, "init_meta_data: undefined nullable: %s", is_uniq);
                 PQclear(res);
                 PQfinish(conn);
-                abort();
+                cache_log(CACHE_ERROR, "init_meta_data: undefined key: %s", is_key);
             }
         }
         PQclear(res);
@@ -213,10 +201,8 @@ bool table_filter(size_t oid) {
 }
 
 table* get_table_info(size_t oid) {
-    cache_log(CACHE_INFO, "get_table_info: meta->count_tables %d", meta->count_tables);
      for (int i = 0; i < meta->count_tables; ++i) {
         table* t  = &(meta->tables[i]);
-        cache_log(CACHE_INFO, "get_table_info: t->oid %d", t->oid);
         if (t->oid == oid) {
             return t;
         }
@@ -224,12 +210,11 @@ table* get_table_info(size_t oid) {
     return NULL;
 }
 
-column* get_uniq_column(size_t table_oid) {
+column* get_key_column(size_t table_oid) {
     table* t = get_table_info(table_oid);
      for (int j = 0; j < t->count_column; ++j) {
         column* c = &(t->columns[j]);
-        cache_log(CACHE_INFO, "get_uniq_column: name %s unic %d", c->column_name, c->is_uniq);
-        if (c->is_uniq) {
+        if (c->is_key) {
             return c;
         }
     }

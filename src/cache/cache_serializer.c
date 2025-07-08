@@ -99,7 +99,6 @@ created_cache_respons* create_response_by_resp(char* table, char* value, int val
             res->columns[cur_count_attr] = get_column_info(table, column_name);
             if (res->columns[cur_count_attr] == NULL) {
                 cache_log(CACHE_ERROR, "create_response_by_resp: table: %s coulumn %s not found", table, column_name);
-                abort();
             }
             free(column_name);
 
@@ -147,7 +146,6 @@ created_cache_respons* create_response_by_pg(PGresult* result, char* table) {
         res->columns[column] = get_column_info(table, column_name);
         if (res->columns[column] == NULL) {
             cache_log(CACHE_ERROR, "create_response_by_resp: table: %s coulumn %s not found", table, column_name);
-            abort();
         }
     }
 
@@ -207,20 +205,22 @@ key_info* create_key_info_by_record(size_t table_oid, char* record) {
     int offset = 0;
 
     key_i->direct = false;
-
     t = get_table_info(table_oid);
     if (t == NULL) {
         cache_log(CACHE_ERROR, "create_key_info_by_record: wrong table oid %d", table_oid);
-        abort();
     }
-
 
     key_i->table_size = strlen(t->name);
     key_i->table = wcalloc( (key_i->table_size + 1) * sizeof(char));
     memcpy(key_i->table, t->name, key_i->table_size);
     key_i->table[key_i->table_size] = '\0';
 
-    c = get_uniq_column(table_oid);
+    c = get_key_column(table_oid);
+
+    if (c == NULL) {
+        cache_log(CACHE_ERROR, "create_key_info_by_record: wrong table oid %d - can't find key column", table_oid);
+    }
+
     key_i->column_size = strlen(c->column_name);
     key_i->column = wcalloc((key_i->column_size + 1) * sizeof(char));
     memcpy(key_i->column, c->column_name, key_i->column_size);
@@ -231,6 +231,9 @@ key_info* create_key_info_by_record(size_t table_oid, char* record) {
         key_i->value = wcalloc((key_i->value_size + 1) * sizeof(char));
         memcpy(key_i->value, record + 1, key_i->column_size);
         key_i->value[key_i->value_size] = '\0';
+    } else {
+        cache_log(CACHE_WARNING, "create_key_info_by_record: undefined record header size");
+        return NULL;
     }
 
 
@@ -245,7 +248,7 @@ key_info* create_key_info_by_record(size_t table_oid, char* record) {
 
     offset = 0;
     key_i->full_size = key_i->table_size + 1 + key_i->column_size + 1 + key_i->value_size;
-    key_i->full_key = wcalloc(sizeof(key_i->table_column_size + 1) * sizeof(char));
+    key_i->full_key = wcalloc((key_i->full_size+ 1) * sizeof(char));
     memcpy(key_i->full_key, t->name, key_i->table_size);
     offset += key_i->table_size;
     key_i->full_key[offset] = '.';
@@ -325,6 +328,7 @@ void destroy_key_info(key_info* key_i) {
     if (key_i == NULL) {
         return;
     }
+
     free(key_i->column);
     free(key_i->table_column);
     free(key_i->table);

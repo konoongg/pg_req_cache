@@ -23,13 +23,11 @@ static void inv_lock(invalidate* inv, bool is_read_lock) {
         int err = pthread_rwlock_rdlock(inv->lock);
         if (err != 0) {
             cache_log(CACHE_ERROR, "inv_lock: pthread_rwlock_rdlock() failed: %s\n", strerror(err));
-            abort();
         }
     } else {
         int err = pthread_rwlock_wrlock(inv->lock);
         if (err != 0) {
             cache_log(CACHE_ERROR, "inv_lock: pthread_rwlock_rdlock() failed: %s\n", strerror(err));
-            abort();
         }
     }
 }
@@ -38,7 +36,6 @@ static void inv_unlock(invalidate* inv) {
     int err = pthread_rwlock_unlock(inv->lock);
     if (err != 0) {
         cache_log(CACHE_ERROR, "inv_unlock: pthread_rwlock_unlock() failed: %s\n", strerror(err));
-        abort();
     }
 }
 
@@ -86,7 +83,6 @@ void init_inv_pool(void) {
         err = pthread_rwlock_init((cache_inv->xid_inv[i]).lock, NULL);
         if (err != 0) {
             cache_log(CACHE_ERROR, "init_inv_pool: pthread_rwlock_init %s", strerror(err));
-            abort();
         }
     }
 }
@@ -96,7 +92,6 @@ void finish_inv_pool(void) {
         int err = pthread_rwlock_destroy((cache_inv->xid_inv[i]).lock);
         if (err != 0) {
             cache_log(CACHE_ERROR, "finish_inv_pool: pthread_rwlock_destroy %s", strerror(err));
-            abort();
         }
         free((cache_inv->xid_inv[i]).lock);
     }
@@ -120,9 +115,52 @@ bool check_inv_xid(size_t xid) {
 }
 
 void add_xid_event(key_info* key_i, size_t xid, ht_data* data) {
-    int index = xid % INVALIDATE_XID_POOL_SIZE;
-    invalidate* xid_inv = &(cache_inv->xid_inv[index]);
+    size_t expeted_prepare = 0;
+    int index;
     xid_invalidate* last;
+    invalidate* xid_inv;
+
+    // check if this data has already been used within this transaction
+    if (!atomic_compare_exchange_strong(&(data->xid_inv), &expeted_prepare, xid)) {
+        if (expeted_prepare == xid) {
+            return;
+        }
+
+        /*
+        * Lazy Invalidation Protocol:
+        *
+        * This implements lazy invalidation where the invalidation flag is set
+        * only when a GET request encounters the record. Special handling is
+        * required for consecutive invalidations:
+        *
+        * 1. When two invalidations occur back-to-back:
+        *    - The second invalidation may succeed or fail
+        *    - We must preserve the first invalidation information
+        *
+        * 2. Critical invariants:
+        *    a) If xid != 0 and we successfully modified the record:
+        *       - The previous transaction must have released locks and committed
+        *         (if it aborted, xid would be zeroed; if still running, our
+        *         modification would be blocked)
+        *    b) If we can modify the record:
+        *       - We mark it invalid with current transaction's xid
+        *       - The WAL write guarantees durability
+        *
+        * 3. Failure cases:
+        *    - Failed second invalidation preserves first invalidation state
+        *    - WAL ensures we never lose committed invalidation information
+        *    - Concurrent readers will see either:
+        *      * Original valid state (if second invalidation fails)
+        *      * New invalid state (if second succeeds)
+        */
+
+        atomic_store(&(data->invalidated), true);
+    }
+
+    data->next_inv = NULL;
+
+    index = xid % INVALIDATE_XID_POOL_SIZE;
+    xid_inv = &(cache_inv->xid_inv[index]);
 
     if (xid_inv->first == NULL) {
         xid_inv->first = xid_inv->last = wcalloc(sizeof(xid_invalidate));
@@ -136,8 +174,6 @@ void add_xid_event(key_info* key_i, size_t xid, ht_data* data) {
 
     last->next = NULL;
     last->xid = xid;
-
-    atomic_store(&(data->xid_inv), xid);
 
     if (last->first_data == NULL) {
         last->first_data = last->last_data = data;

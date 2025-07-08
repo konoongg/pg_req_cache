@@ -42,7 +42,7 @@ enum db_type {
 struct column {
     db_type type;
     char* column_name;
-    bool is_uniq;
+    bool is_key;
 };
 
 

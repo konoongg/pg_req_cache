@@ -8,7 +8,7 @@ def test_simple_del_table_tt(create_and_drop_db, cleanup_schema):
     db_name = create_and_drop_db
     table_name, columns = create_table_text_text(db_name)
     restart_postgres()
-    cursor = open_table(db_name)
+    cursor = open_bd(db_name)
     sock = create_socket()
 
     kv = {
@@ -51,7 +51,7 @@ def test_no_exist_del_table_tt(create_and_drop_db, cleanup_schema):
     db_name = create_and_drop_db
     table_name, columns = create_table_text_text(db_name)
     restart_postgres()
-    cursor = open_table(db_name)
+    cursor = open_bd(db_name)
     sock = create_socket()
 
     key = create_key(table_name, columns[0], "test1")

@@ -69,7 +69,6 @@ db_oper_res read_from_db(PGconn* conn, char* t, created_cache_respons** res) {
         while (result != NULL) {
             if (PQresultStatus(result) == PGRES_FATAL_ERROR) {
                 cache_log(CACHE_ERROR,"read_from_db: bd response error  -  %s", PQresultErrorMessage(result));
-                abort();
             }
             result = PQgetResult(conn);
             PQclear(result);
@@ -87,15 +86,13 @@ static void connect_to_db(backend* backends) {
     for (int i = 0; i < config.db_conf.count_backend; ++i) {
         backends[i].conn_with_db = PQconnectStart(conn_info);
         if (backends[i].conn_with_db == NULL) {
-            cache_log(CACHE_ERROR, "connect_to_db: PQstatus is bad - %s",  PQerrorMessage(backends[i].conn_with_db));
             finish_connects(backends);
-            abort();
+            cache_log(CACHE_ERROR, "connect_to_db: PQstatus is bad - %s",  PQerrorMessage(backends[i].conn_with_db));
         }
 
         if (PQstatus(backends[i].conn_with_db) == CONNECTION_BAD) {
-            cache_log(CACHE_ERROR, "connect_to_db: PQstatus is bad - %s",  PQerrorMessage(backends[i].conn_with_db));
             finish_connects(backends);
-            abort();
+            cache_log(CACHE_ERROR, "connect_to_db: PQstatus is bad - %s",  PQerrorMessage(backends[i].conn_with_db));
         }
         backends[i].fd = PQsocket(backends[i].conn_with_db);
     }

@@ -92,6 +92,5 @@ void init_cache_gc(void) {
     err = pthread_create(&(cache_gc_tid), NULL, start_cache_gc, NULL);
     if (err) {
         cache_log(CACHE_ERROR, "init_cache_gc: pthread_create error %s", strerror(err));
-        abort();
     }
 }

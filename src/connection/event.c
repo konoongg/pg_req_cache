@@ -55,7 +55,6 @@ event_loop* init_loop(void) {
     l->loop = ev_loop_new(ev_recommended_backends());
     if (l->loop  == NULL) {
         cache_log(CACHE_ERROR, "init_loop: cannot create libev default loop");
-        abort();
     }
 
     return l;
@@ -65,7 +64,6 @@ void loop_run(event_loop* l) {
     bool run = ev_run((struct ev_loop*)(l->loop), EVRUN_ONCE);
     if (!run) {
         cache_log(CACHE_ERROR, "loop_run: ev_run return false");
-        abort();
     }
 }
 

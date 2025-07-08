@@ -320,7 +320,6 @@ void init_workers(void) {
         int err = pthread_create(&(tids[i]), NULL, start_worker, NULL);
         if (err) {
             cache_log(CACHE_ERROR, "init_worker: pthread_create error %s", strerror(err));
-            abort();
         }
     }
 
@@ -328,7 +327,6 @@ void init_workers(void) {
         int err = pthread_join(tids[i], NULL);
         if (err) {
             cache_log(CACHE_ERROR, "init_worker: pthread_join error %s", strerror(err));
-            abort();
         }
     }
 

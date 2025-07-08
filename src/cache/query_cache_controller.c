@@ -258,7 +258,6 @@ void init_db_worker(void) {
     err = pthread_mutex_init(dbw.lock, NULL);
     if (err != 0) {
         cache_log(CACHE_ERROR, "init_db_worker: pthread_mutex_init %s", strerror(err));
-        abort();
     }
 
     efd = create_ev_notify(dbw.wthrd);
@@ -284,6 +283,5 @@ void init_db_worker(void) {
     err = pthread_create(&(db_tid), NULL, start_db_worker, NULL);
     if (err) {
         cache_log(CACHE_ERROR, "init_worker: pthread_create error %s", strerror(err));
-        abort();
     }
 }

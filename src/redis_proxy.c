@@ -37,7 +37,7 @@ static void register_proxy(void) {
     BackgroundWorker worker;
     memset(&worker, 0, sizeof(BackgroundWorker));
     worker.bgw_flags = BGWORKER_SHMEM_ACCESS;
-    worker.bgw_start_time =  BgWorkerStart_RecoveryFinished;
+    worker.bgw_start_time =  BgWorkerStart_ConsistentState;
     strncpy(worker.bgw_library_name, "pg_redis_proxy", 15);
     strncpy(worker.bgw_function_name, "proxy_start_work", 17);
     strncpy(worker.bgw_name, "pg_redis_proxy", 15);
