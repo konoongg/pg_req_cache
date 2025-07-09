@@ -13,6 +13,7 @@
 #include "ht_response_type.h"
 #include "ht.h"
 #include "io.h"
+#include "logger.h"
 #include "pg_req_creater.h"
 #include "query_cache_controller.h"
 #include "resp_creater.h"

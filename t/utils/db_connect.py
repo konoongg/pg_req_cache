@@ -66,8 +66,9 @@ def restart_cluster(timeout: int = 100):
         ["pg_ctl", "-D", "redis_proxy", "stop", "-m", "immediate"],
         ["pg_ctl", "-D", "master/data", "stop", "-m", "immediate"],
         ["pg_ctl", "-D", "replica/data", "stop", "-m", "immediate"],
-        ["pg_ctl", "-D", "master/data", "-l", "logfile", "start"],
-        ["pg_ctl", "-D", "replica/data", "-l", "logfile", "start"],
+
+        ["pg_ctl", "-D", "master/data", "-l", "master/logfile", "start"],
+        ["pg_ctl", "-D", "replica/data", "-l", "replica/logfile", "start"],
     ]
 
     for cmd in commands:

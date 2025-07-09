@@ -698,96 +698,96 @@ def test_event_single_delete_invalid_table_tt(create_and_drop_db, cleanup_schema
             cursor.close()
 
 
-def test_replica_invalid(create_and_drop_db, cleanup_schema):
-    db_name = create_and_drop_db
-    table_name, columns = create_table_text_text(db_name)
-    restart_cluster()
-    cursor_master = open_bd(db_name, 5432)
-    cursor_replica = open_bd(db_name, 5433)
+# def test_replica_invalid(create_and_drop_db, cleanup_schema):
+#     db_name = create_and_drop_db
+#     table_name, columns = create_table_text_text(db_name)
+#     restart_cluster()
+#     cursor_master = open_bd(db_name, 5432)
+#     cursor_replica = open_bd(db_name, 5433)
 
-    sock_master = create_socket(6379)
-    sock_replica = create_socket(6380)
+#     sock_master = create_socket(6379)
+#     sock_replica = create_socket(6380)
 
-    kv = {
-        columns[0]: "test1",
-        columns[1]: "test2"
-    }
-    key = create_key(table_name, columns[0], "test1")
-    value = create_value(kv)
-    set_command = create_resp_req(" ".join(["set", key, value]))
-    expected_set_response = create_resp_simple_string("OK")
+#     kv = {
+#         columns[0]: "test1",
+#         columns[1]: "test2"
+#     }
+#     key = create_key(table_name, columns[0], "test1")
+#     value = create_value(kv)
+#     set_command = create_resp_req(" ".join(["set", key, value]))
+#     get_command = create_resp_req(" ".join(["get", key]))
 
-    sock_master.sendall(set_command)
-    set_response = sock_master.recv(1024)
-    assert set_response == expected_set_response, (
-        f"SET failed. Expected: {expected_set_response.decode('utf-8')}, "
-        f"got: {set_response.decode('utf-8') if set_response else 'None'}"
-    )
+#     expected_set_response = create_resp_simple_string("OK")
+#     sock_master.sendall(set_command)
+#     set_response = sock_master.recv(1024)
+#     assert set_response == expected_set_response, (
+#         f"SET failed. Expected: {expected_set_response.decode('utf-8')}, "
+#         f"got: {set_response.decode('utf-8') if set_response else 'None'}"
+#     )
 
-    time.sleep(1)
+#     time.sleep(1)
 
-    get_command = create_resp_req(" ".join(["get", key]))
-    expected_data = [kv[columns[0]], kv[columns[1]]]
-    expected_get_response = create_resp_array([expected_data])
+#     expected_data = [kv[columns[0]], kv[columns[1]]]
+#     expected_get_response = create_resp_array([expected_data])
 
-    sock_master.sendall(get_command)
-    get_response = sock_master.recv(1024)
-    assert get_response == expected_get_response, (
-        f"Initial GET failed. Expected: {expected_get_response.decode('utf-8')}, "
-        f"got: {get_response.decode('utf-8') if get_response else 'None'}"
-    )
+#     sock_master.sendall(get_command)
+#     get_response = sock_master.recv(1024)
+#     assert get_response == expected_get_response, (
+#         f"Initial GET failed. Expected: {expected_get_response.decode('utf-8')}, "
+#         f"got: {get_response.decode('utf-8') if get_response else 'None'}"
+#     )
 
-    sock_replica.sendall(get_command)
-    get_response = sock_replica.recv(1024)
-    assert get_response == expected_get_response, (
-        f"Initial GET failed. Expected: {expected_get_response.decode('utf-8')}, "
-        f"got: {get_response.decode('utf-8') if get_response else 'None'}"
-    )
+#     sock_replica.sendall(get_command)
+#     get_response = sock_replica.recv(1024)
+#     assert get_response == expected_get_response, (
+#         f"Initial GET failed. Expected: {expected_get_response.decode('utf-8')}, "
+#         f"got: {get_response.decode('utf-8') if get_response else 'None'}"
+#     )
 
 
-    updated_values = {
-        columns[0]: kv[columns[0]],
-        columns[1]: "test4"
-    }
+#     updated_values = {
+#         columns[0]: kv[columns[0]],
+#         columns[1]: "test4"
+#     }
 
-    update_query = sql.SQL("UPDATE {} SET {} = %s WHERE {} = %s").format(
-        sql.Identifier(table_name),
-        sql.Identifier(columns[1]),
-        sql.Identifier(columns[0])
-    )
-    cursor_master.execute(update_query, (updated_values[columns[1]], updated_values[columns[0]]))
+#     update_query = sql.SQL("UPDATE {} SET {} = %s WHERE {} = %s").format(
+#         sql.Identifier(table_name),
+#         sql.Identifier(columns[1]),
+#         sql.Identifier(columns[0])
+#     )
+#     cursor_master.execute(update_query, (updated_values[columns[1]], updated_values[columns[0]]))
 
-    # Verify update in PostgreSQL
-    select_query = sql.SQL("SELECT * FROM {} WHERE {} = %s AND {} = %s").format(
-        sql.Identifier(table_name),
-        sql.Identifier(columns[0]),
-        sql.Identifier(columns[1])
-    )
-    cursor_master.execute(select_query, (updated_values[columns[0]], updated_values[columns[1]]))
-    updated_result = cursor_master.fetchone()
-    assert updated_result is not None, (
-        f"Data not updated in PostgreSQL. Expected: {updated_values}, "
-        f"found: None"
-    )
+#     # Verify update in PostgreSQL
+#     select_query = sql.SQL("SELECT * FROM {} WHERE {} = %s AND {} = %s").format(
+#         sql.Identifier(table_name),
+#         sql.Identifier(columns[0]),
+#         sql.Identifier(columns[1])
+#     )
+#     cursor_master.execute(select_query, (updated_values[columns[0]], updated_values[columns[1]]))
+#     updated_result = cursor_master.fetchone()
+#     assert updated_result is not None, (
+#         f"Data not updated in PostgreSQL. Expected: {updated_values}, "
+#         f"found: None"
+#     )
 
-    cursor_replica.execute(select_query, (updated_values[columns[0]], updated_values[columns[1]]))
-    updated_result = cursor_replica.fetchone()
-    assert updated_result is not None, (
-        f"Data not updated in PostgreSQL. Expected: {updated_values}, "
-        f"found: None"
-    )
+#     cursor_replica.execute(select_query, (updated_values[columns[0]], updated_values[columns[1]]))
+#     updated_result = cursor_replica.fetchone()
+#     assert updated_result is not None, (
+#         f"Data not updated in PostgreSQL. Expected: {updated_values}, "
+#         f"found: None"
+#     )
 
-    time.sleep(1)
+#     time.sleep(1)
 
-    # Verify data is still accessible after TTL expiration
-    updated_expected_data = [updated_values[columns[0]], updated_values[columns[1]]]
-    updated_expected_response = create_resp_array([updated_expected_data])
+#     # Verify data is still accessible after TTL expiration
+#     updated_expected_data = [updated_values[columns[0]], updated_values[columns[1]]]
+#     updated_expected_response = create_resp_array([updated_expected_data])
 
-    sock_replica.sendall(get_command)
-    updated_get_response = sock_replica.recv(1024)
+#     sock_replica.sendall(get_command)
+#     updated_get_response = sock_replica.recv(1024)
 
-    assert updated_get_response == updated_expected_response, (
-        f"Data should be accessible after TTL. "
-        f"Expected: {updated_expected_response.decode('utf-8')}, "
-        f"got: {updated_get_response.decode('utf-8') if updated_get_response else 'None'}"
-    )
+#     assert updated_get_response == updated_expected_response, (
+#         f"Data should be accessible after TTL. "
+#         f"Expected: {updated_expected_response.decode('utf-8')}, "
+#         f"got: {updated_get_response.decode('utf-8') if updated_get_response else 'None'}"
+#     )

@@ -102,7 +102,7 @@ static void process_update(XLogRecord*  record, XLogReaderState* xlogreader) {
         process_event(key_i, record->xl_xid);
     }
 
-    //destroy_key_info(key_i);
+    destroy_key_info(key_i);
 }
 
 

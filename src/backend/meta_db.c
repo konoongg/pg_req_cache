@@ -70,10 +70,11 @@ void init_meta_data(void) {
     meta = wcalloc(sizeof(db_meta_data));
 
     query = "SELECT tablename FROM pg_tables WHERE schemaname = 'public';";
+
+
+    cache_log(CACHE_DEBUG, "send %s", query);
     res = PQexec(conn, query);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
-        PQclear(res);
-        PQfinish(conn);
         cache_log(CACHE_ERROR, "init db meta data: SELECT failed: %s", PQerrorMessage(conn));
     }
 
@@ -130,15 +131,22 @@ void init_meta_data(void) {
         PQclear(res);
 
         query_t_info = create_t_info_req(t->name);
+
+        cache_log(CACHE_DEBUG, "init meta db: send %s", query_t_info);
         res = PQexec(conn, query_t_info);
         free(query_t_info);
         if (PQresultStatus(res) != PGRES_TUPLES_OK) {
-            PQclear(res);
-            PQfinish(conn);
             cache_log(CACHE_ERROR, "init db meta data: SELECT failed: %s", PQerrorMessage(conn));
         }
 
         t->count_column = PQntuples(res);
+
+        if (t->count_column == 0) {
+            cache_log(CACHE_ERROR, "init_meta_data table %s don't have column", t->name);
+        }
+
+        cache_log(CACHE_DEBUG, "init_meta_data table %s count column %d", t->name, t->count_column);
+
         t->columns = wcalloc(t->count_column  * sizeof(column));
         for (int c = 0; c < t->count_column; ++c) {
             char* column_name = PQgetvalue(res, c, 0);
@@ -180,9 +188,11 @@ void init_meta_data(void) {
 * and whether it can be nullable, based on the table name and column name.
 */
 column* get_column_info(char* table_name, char* column_name) {
+
     for (int i = 0; i < meta->count_tables; ++i) {
         table* t  = &(meta->tables[i]);
         if (strncmp(t->name, table_name, strlen(table_name)) == 0 && strlen(table_name) == strlen(t->name)) {
+
             for (int j = 0; j < t->count_column; ++j) {
                 column* c = &(t->columns[j]);
                 if (strncmp(c->column_name, column_name, strlen(column_name)) == 0 &&
