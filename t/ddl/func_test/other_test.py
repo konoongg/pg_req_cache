@@ -8,7 +8,7 @@ from t.utils.db_connect import *
 def test_ping(create_and_drop_db, cleanup_schema):
     db_name = create_and_drop_db
     restart_postgres()
-    cursor = open_table(db_name)
+    cursor = open_bd(db_name)
     sock = create_socket()
 
     command = create_resp_req(" ".join(["ping"]))
@@ -21,7 +21,7 @@ def test_ping(create_and_drop_db, cleanup_schema):
 def test_PING(create_and_drop_db, cleanup_schema):
     db_name = create_and_drop_db
     restart_postgres()
-    cursor = open_table(db_name)
+    cursor = open_bd(db_name)
     sock = create_socket()
 
     command = create_resp_req(" ".join(["PING"]))

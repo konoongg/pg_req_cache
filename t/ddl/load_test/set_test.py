@@ -8,9 +8,9 @@ from t.utils.create_resp import *
 from t.utils.db_connect import *
 
 
-SYSTEM_NAME = "redis"  # Название системы (настраивается в скрипте)
-PROGRAM_VERSION = "7.0.15"       # Версия программы
-DB_STATE = ""  # Состояние БД
+SYSTEM_NAME = "pgcache"  # Название системы (настраивается в скрипте)
+PROGRAM_VERSION = "0.6"       # Версия программы
+DB_STATE = "10000 записей, два текстового столбца"  # Состояние БД
 THREADS_IN_SYSTEM = 4
 
 WORKERS = [1, 4, 8, 16]
@@ -51,7 +51,7 @@ except FileExistsError:
 def test_set(create_and_drop_db, workers, pipeline, request_count, client_count, port_num, cleanup_schema):
     db_name = create_and_drop_db
     table_name, columns = create_table_text_text(db_name)
-    restart_postgres(100)
+    restart_postgres()
 
     # Redis benchmark setup
     benchmark_params = {

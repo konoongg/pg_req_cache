@@ -31,7 +31,7 @@ def create_resp_error(message):
 
 def create_resp_array(items):
     if items is None:
-        return b"*-1\r\n"
+        return b"*0\r\n"
     resp_message = f"*{len(items)}\r\n"
     for item in items:
         if isinstance(item, str):
