@@ -26,6 +26,9 @@ void init_def_resp (void) {
     def_resp.ok.answer = "+OK\r\n";
     def_resp.ok.answer_size = 5;
 
+    def_resp.replica_cant_modify.answer = "-READONLY You can't write against a read only replica.\r\n";
+    def_resp.replica_cant_modify.answer_size = 56;
+
     def_resp.pong.answer = "+PONG\r\n";
     def_resp.pong.answer_size = 7;
 

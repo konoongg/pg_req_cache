@@ -138,7 +138,12 @@ static process_result do_set(client_req* cl_req, answer* answ, connection* conn)
     created_cache_respons* res = create_response_by_resp(key_i->table, value, value_size);
     process_result result;
 
-    if (conn->status != DO_CACHE) {
+    if (config.is_replica) {
+        answ->answer_size = def_resp.replica_cant_modify.answer_size;
+        answ->answer = wcalloc(answ->answer_size  * sizeof(char));
+        memcpy(answ->answer, def_resp.replica_cant_modify.answer, answ->answer_size);
+        result = DONE;
+    } else if (conn->status != DO_CACHE) {
         char* req_to_db = create_pg_set(key_i, res->res);
         register_command(NULL, key_i->table, key_i->table_size, req_to_db, conn, CACHE_SYNC);
         conn->status = DO_CACHE;
@@ -182,8 +187,12 @@ static process_result do_set(client_req* cl_req, answer* answ, connection* conn)
 static process_result do_del(client_req* cl_req, answer* answ, connection* conn) {
     process_result result;
 
-
-    if (conn->status != DO_CACHE) {
+     if (config.is_replica) {
+        answ->answer_size = def_resp.replica_cant_modify.answer_size;
+        answ->answer = wcalloc(answ->answer_size  * sizeof(char));
+        memcpy(answ->answer, def_resp.replica_cant_modify.answer, answ->answer_size);
+        result = DONE;
+    } else if (conn->status != DO_CACHE) {
         int count_del_keys = cl_req->argc - 1;
         char* req_to_db;
         key_info** del_keys = wcalloc(count_del_keys * sizeof(key_info*));

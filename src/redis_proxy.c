@@ -75,8 +75,10 @@ void proxy_start_work(Datum main_arg) {
     init_db_worker();
     cache_log(CACHE_INFO, "finish init db worker %d", config.worker_conf.count_worker);
 
-    //init_invalidator();
-    cache_log(CACHE_INFO, "finish init wal reader");
+    if (config.c_conf.invalidate) {
+        init_invalidator();
+        cache_log(CACHE_INFO, "finish init wal reader");
+    }
 
     init_workers();
 }

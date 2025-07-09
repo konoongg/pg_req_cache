@@ -30,6 +30,7 @@ void create_err_resp(answer* answ, char* src);
 struct default_resp_answer {
     answer ok;
     answer pong;
+    answer replica_cant_modify;
 
 
     answer aof;

@@ -22,7 +22,7 @@ static void defalt_setting_init(void) {
     config.c_conf.max_storage_size = (size_t)1024 * 1024 * 1024 * 1024;
     config.c_conf.seed = 101; // hash seed
 
-    config.c_conf.invalid_update = false;
+    config.c_conf.invalidate = true;
 
     config.worker_conf.backlog_size = 512; // listen socket backlog
     config.worker_conf.buffer_size = 512; // read buffer size
