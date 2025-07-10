@@ -15,10 +15,8 @@ typedef struct ht_basket ht_basket;
 typedef struct ht_data ht_data;
 typedef struct invalid_ht_data invalid_ht_data;
 
-bool check_invalidate(ht_data* data);
 data_version* get_data(hash_table* ht, find_ht_data* find);
 hash_table* create_ht(create_ht_info* info);
-ht_data* prepare_invalidate(hash_table* ht, find_ht_data* find, size_t xid);
 int delete_data(hash_table* ht, find_ht_data* find);
 size_t get_cur_size(hash_table* ht);
 void destroy_ht(hash_table* ht);
@@ -62,10 +60,6 @@ struct ht_data {
     time_t last_time;
     size_t expire_ms;
     size_t ht_data_size;
-
-    ht_data* next_inv;
-    _Atomic size_t xid_inv;
-    _Atomic bool invalidated;
 };
 
 struct create_ht_info {

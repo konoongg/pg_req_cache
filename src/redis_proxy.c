@@ -4,7 +4,11 @@
 #include "postgres.h"
 
 #include "fmgr.h"
+#include "miscadmin.h"
 #include "postmaster/bgworker.h"
+#include "storage/ipc.h"
+#include "storage/lwlock.h"
+#include "storage/shmem.h"
 
 #include "alloc.h"
 #include "cache_gc.h"
@@ -28,13 +32,48 @@ void clean_up(void);
 
 config_cache config;
 statistics stats;
+extern cache* c;
+
+static shmem_request_hook_type prev_shmem_request_hook = NULL;
+static shmem_startup_hook_type prev_shmem_startup_hook = NULL;
 
 void _PG_init(void) {
     register_proxy();
 }
 
+static void req_cache_shmem_request(void) {
+    init_config();
+
+    if (prev_shmem_request_hook) {
+		prev_shmem_request_hook();
+    }
+
+	RequestAddinShmemSpace(sizeof(cache) + config.c_conf.max_storage_size);
+}
+
+static void req_cache_shmem_startup(void) {
+    bool found;
+
+    if (prev_shmem_startup_hook) {
+		prev_shmem_startup_hook();
+    }
+
+    //this hook is called before postmaster starts accepting connections, so no blocking is needed
+    c = ShmemInitStruct("pg_req_cache", sizeof(cache) + config.c_conf.max_storage_size, &found);
+
+    if (found) {
+        cache_log(CACHE_WARNING, "pg_req_cache already exist");
+    }
+}
+
 static void register_proxy(void) {
     BackgroundWorker worker;
+
+    prev_shmem_request_hook = shmem_request_hook;
+    shmem_request_hook = req_cache_shmem_request;
+
+    prev_shmem_startup_hook = shmem_startup_hook;
+	shmem_startup_hook = req_cache_shmem_startup;
     memset(&worker, 0, sizeof(BackgroundWorker));
     worker.bgw_flags = BGWORKER_SHMEM_ACCESS;
     worker.bgw_start_time =  BgWorkerStart_ConsistentState;
@@ -54,8 +93,8 @@ static void register_proxy(void) {
 void proxy_start_work(Datum main_arg) {
     cache_log(CACHE_INFO, "start bg worker pg_redis_proxy pid");
 
-    init_config();
-    cache_log(CACHE_INFO, "finish init config");
+    init_shared_allocator(c + sizeof(cache), config.c_conf.max_storage_size);
+    cache_log(CACHE_INFO, "finish init allocator");
 
     init_stats();
     cache_log(CACHE_INFO, "finish init stats");
@@ -73,12 +112,7 @@ void proxy_start_work(Datum main_arg) {
 
     cache_log(CACHE_INFO, "start init db worker");
     init_db_worker();
+
     cache_log(CACHE_INFO, "finish init db worker %d", config.worker_conf.count_worker);
-
-    if (config.c_conf.invalidate) {
-        init_invalidator();
-        cache_log(CACHE_INFO, "finish init wal reader");
-    }
-
     init_workers();
 }

@@ -76,15 +76,6 @@ static ht_data* find_data_in_basket(hash_table* ht, ht_basket* basket, void* fin
     data = basket->first;
     while (data != NULL) {
         if (ht->cmp_key(data->find_key, find_key)) {
-
-            if (take_tll && check_invalidate(data)) {
-                bool expected_not_inv = false;
-                if (atomic_compare_exchange_strong(&(data->invalidated), &expected_not_inv, true)) {
-                    atomic_store(&(data->xid_inv), 0);
-                }
-                return NULL;
-            }
-
             if (data->expire_ms > 0 && take_tll) {
                 size_t current_ms = get_current_ms();
                 size_t elapsed_ms = current_ms - (size_t)(data->last_time * 1000);
@@ -105,69 +96,6 @@ static ht_data* find_data_in_basket(hash_table* ht, ht_basket* basket, void* fin
     return NULL;
 }
 
-/*
- * Verify the xid (transaction ID) which can be 0 in two distinct cases:
- *
- * 1) No transaction has attempted to modify this record yet (initial state)
- * 2) A transaction has explicitly invalidated the record by:
- *    a) First setting the invalidation flag
- *    b) Then zeroing out the xid
- *
- * Important synchronization guarantee:
- * The invalidation flag is always set BEFORE clearing the xid, therefore:
- * - If xid is 0 and flag is set → record was explicitly invalidated
- * - If xid is 0 and flag is not set → record is pristine/unmodified
- *
- * There cannot be a state where:
- * - xid is already 0 (cleared)
- * - but invalidation flag isn't set yet
- * This ordering is crucial for correct concurrency control.
- */
-bool check_invalidate(ht_data* data) {
-    size_t xid  = atomic_load(&(data->xid_inv));
-
-    if (xid == 0) {
-        if (atomic_load(&(data->invalidated))) {
-            return true;
-        }
-        return false;
-    }
-
-    if (atomic_load(&(data->invalidated))) {
-        return true;
-    }
-
-
-    if (!check_inv_xid(xid)) {
-        /*
-        * This check handles the race condition where:
-        * 1. We read the xid
-        * 2. Immediately after, the transaction aborts and removes all records
-        *
-        * In this case:
-        * - Since all records were deleted, we won't find the transaction info
-        * - This could mean either:
-        *   a) The transaction committed successfully, OR
-        *   b) It was aborted
-        *
-        * The xid=0 check resolves this ambiguity:
-        * - If xid was reset to 0: Confirms the transaction was aborted
-        * - Otherwise: Consider it committed (safe default)
-        *
-        * This ensures we never return invalidated data while maintaining good performance
-        * in the common case (no ongoing invalidations).
-        */
-
-        xid = atomic_load(&(data->xid_inv));
-        if (xid == 0) {
-            return false;
-        }
-
-        return true;
-    }
-    return false;
-}
-
 static void free_version(hash_table* ht, ht_data* cur_data, data_version* version, data_version* prev_version) {
     ht->value_free(version->value);
     if (version == cur_data->value_first) {
@@ -179,7 +107,7 @@ static void free_version(hash_table* ht, ht_data* cur_data, data_version* versio
     if (version->next == NULL) {
         cur_data->value_cur = prev_version;
     }
-    free(version);
+    shfree(version);
 }
 
 static void free_data(hash_table* ht, ht_basket* basket, ht_data* cur_data, ht_data* prev_data) {
@@ -226,16 +154,16 @@ static void free_data_from_ht(hash_table* ht, ht_basket* basket, ht_data* cur_da
     * - But we haven't yet processed the WAL notification
     */
 
-    if (all_del && atomic_load(&(cur_data->xid_inv)) == 0 && atomic_load(&(cur_data->invalidated)) == false) {
+    if (all_del) {
         free_data(ht, basket, cur_data, prev_data);
     }
 }
 
 hash_table* create_ht(create_ht_info* info) {
-    hash_table* ht = wcalloc(sizeof(hash_table));
+    hash_table* ht = shalloc(sizeof(hash_table));
 
     ht->count_baskets = info->count_basket;
-    ht->baskets = wcalloc(ht->count_baskets * sizeof(ht_basket));
+    ht->baskets = shalloc(ht->count_baskets * sizeof(ht_basket));
     ht->ttl_s = info->ttl_s;
     ht->max_ht_size = info->max_ht_size;
 
@@ -250,7 +178,7 @@ hash_table* create_ht(create_ht_info* info) {
     for (int i = 0; i < ht->count_baskets ; ++i) {
         int err;
 
-        (ht->baskets[i]).lock = wcalloc(sizeof(pthread_rwlock_t));
+        (ht->baskets[i]).lock = shalloc(sizeof(pthread_rwlock_t));
         err = pthread_rwlock_init((ht->baskets[i]).lock, NULL);
         if (err != 0) {
             cache_log(CACHE_ERROR, "create_ht: pthread_rwlock_init %s", strerror(err));
@@ -273,7 +201,7 @@ void destroy_ht(hash_table* ht) {
                 data_version* next_version = version->next;
                 assert(version->usage_counter == 0);
                 ht->value_free(version->value);
-                free(version);
+                shfree(version);
                 version = next_version;
             }
             ht->free_data(cur_data);
@@ -284,10 +212,10 @@ void destroy_ht(hash_table* ht) {
         if (err != 0) {
             cache_log(CACHE_ERROR, "free_cache: pthread_rwlock_destroy %s", strerror(err));
         }
-        free((void*) basket->lock);
+        shfree((void*) basket->lock);
     }
-    free(ht->baskets);
-    free(ht);
+    shfree(ht->baskets);
+    shfree(ht);
 }
 
 
@@ -296,21 +224,6 @@ void drop_version(data_version* version) {
     assert(version->usage_counter >= 0);
 }
 
-ht_data* prepare_invalidate(hash_table* ht, find_ht_data* find, size_t xid) {
-    ht_basket* basket;
-    ht_data* data;
-    basket = get_basket(ht, find->hash_key, find->hash_key_size);
-    basket_lock(basket, write_lock);
-
-    data = find_data_in_basket(ht, basket, find->find_key, WITH_TLL);
-
-    if (data != NULL) {
-        data->xid_inv = xid;
-    }
-
-    basket_unlock(basket);
-    return data;
-}
 
 data_version* get_data(hash_table* ht, find_ht_data* find) {
     ht_basket* basket;
@@ -341,25 +254,22 @@ void set_data(hash_table* ht, create_ht_data* new_data) {
     data = find_data_in_basket(ht, basket, new_data->find_key, WITHOUT_TLL);
     if (data == NULL) {
         if (basket->first == NULL) {
-            data = basket->first = basket->last = wcalloc(sizeof(ht_data));
+            data = basket->first = basket->last = shalloc(sizeof(ht_data));
         } else {
-            basket->last->next = wcalloc(sizeof(ht_data));
+            basket->last->next = shalloc(sizeof(ht_data));
             data = basket->last = basket->last->next;
         }
         data->next = NULL;
         data->find_key = new_data->find_key;
-        data->value_first = data->value_cur = wcalloc(sizeof(data_version));
+        data->value_first = data->value_cur = shalloc(sizeof(data_version));
         data->value_cur->dirty = false;
-        data->xid_inv = 0;
-        data->next_inv = NULL;
     } else {
         if (data->value_cur->usage_counter == 0) {
             atomic_fetch_sub(&(ht->cur_ht_size), data->ht_data_size);
             ht->value_free(data->value_cur->value);
-            data->value_cur->dirty = true;
         } else {
             data->value_cur->dirty = true;
-            data->value_cur->next = wcalloc(sizeof(data_version));
+            data->value_cur->next = shalloc(sizeof(data_version));
             data->value_cur = data->value_cur->next;
         }
     }
@@ -371,8 +281,6 @@ void set_data(hash_table* ht, create_ht_data* new_data) {
     data_size = new_data->find_key_size + new_data->value_size + sizeof(ht_data);
 
     atomic_fetch_add(&(ht->cur_ht_size), data_size);
-
-    data->invalidated = false;
 
     data->last_time = time(NULL);
     if (data->last_time == -1) {
@@ -393,15 +301,15 @@ void set_data_if_not_exist(hash_table* ht, create_ht_data* new_data) {
     data = find_data_in_basket(ht, basket, new_data->find_key, WITHOUT_TLL);
     if (data == NULL) {
         if (basket->first == NULL) {
-            data = basket->first = basket->last = wcalloc(sizeof(ht_data));
+            data = basket->first = basket->last = shalloc(sizeof(ht_data));
         } else {
-            basket->last->next = wcalloc(sizeof(ht_data));
+            basket->last->next = shalloc(sizeof(ht_data));
             data = basket->last = basket->last->next;
         }
         data->next = NULL;
         data->find_key = new_data->find_key;
 
-        data->value_first = data->value_cur = wcalloc(sizeof(data_version));
+        data->value_first = data->value_cur = shalloc(sizeof(data_version));
         data->value_cur->dirty = false;
         data->value_cur->value = new_data->value;
         data->value_cur->next = NULL;
@@ -481,23 +389,21 @@ void ht_clean(hash_table* ht, int recomendate_ttl_s) {
         cur_data = basket->first;
         prev_data = NULL;
         while (cur_data != NULL) {
-            bool invalidated = cur_data->invalidated;
             bool all_del = true;
-            bool delete_all_version = false;
             data_version* version = cur_data->value_first;
             data_version* prev_version = NULL;
 
-            delete_all_version = need_delete_all_version(cur_data, recomendate_ttl_s);
+            bool delete_all_version = need_delete_all_version(cur_data, recomendate_ttl_s);
 
             while (version != NULL) {
                 data_version* next_version = version->next;
                 if (version->usage_counter == 0) {
-                    if (version->dirty || delete_all_version || invalidated) {
+                    if (version->dirty || delete_all_version) {
                         free_version(ht, cur_data, version, prev_version);
                     }
 
                 } else {
-                    if (delete_all_version || invalidated) {
+                    if (delete_all_version ) {
                         version->dirty = true;
                     }
                     prev_version = version;

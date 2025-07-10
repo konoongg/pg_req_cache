@@ -10,6 +10,7 @@
 
 #include "alloc.h"
 #include "config.h"
+#include "logger.h"
 
 
 extern config_cache config;
@@ -19,9 +20,8 @@ static void defalt_setting_init(void) {
     config.c_conf.count_basket_values = 100003; // cache basket
     config.c_conf.count_basket_tables = 101; // cache basket
     config.c_conf.ttl_s = 0; // cache ttl
-    config.c_conf.max_storage_size = (size_t)1024 * 1024 * 1024 * 1024;
+    config.c_conf.max_storage_size = (size_t)1024 * 1024 * 1024;
     config.c_conf.seed = 101; // hash seed
-
     config.c_conf.invalidate = true;
 
     config.worker_conf.backlog_size = 512; // listen socket backlog
@@ -36,7 +36,7 @@ static void defalt_setting_init(void) {
     memcpy(config.db_conf.user, "postgres", 9);
 
     config.p_conf.delim = '.';
-    config.is_replica = RecoveryInProgress();
+    config.is_replica = false;
 }
 
 // Initialize the config value from the corresponding file.
@@ -44,17 +44,17 @@ static void defalt_setting_init(void) {
 void init_config(void) {
     defalt_setting_init();
 
-    DefineCustomIntVariable("pg_req_cache.port",
-							"port for cache",
-							NULL,
-							&(config.worker_conf.listen_port),
-							6379,
-							1024, 49151,
-							PGC_USERSET,
-							0,
-							NULL,
-							NULL,
-							NULL);
+    // DefineCustomIntVariable("pg_req_cache.port",
+	// 						"port for cache",
+	// 						NULL,
+	// 						&(config.worker_conf.listen_port),
+	// 						6379,
+	// 						1024, 49151,
+	// 						PGC_USERSET,
+	// 						0,
+	// 						NULL,
+	// 						NULL,
+	// 						NULL);
 
-    MarkGUCPrefixReserved("pg_req_cache");
+    // MarkGUCPrefixReserved("pg_req_cache");
 }

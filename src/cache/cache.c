@@ -33,8 +33,6 @@ void init_cache(void) {
     create_ht_info ht_table_info;
     create_ht_info ht_value_info;
 
-    c = wcalloc(sizeof(cache));
-
     atomic_store(&c->table_max_num, 0);
 
     ht_table_info.cmp_key = cmp_table_key;
@@ -161,36 +159,6 @@ void set_cache(key_info* key_i, cache_response* v, int value_size, int ttl_ms) {
     create_ht_data new_value_data = prepare_value(key_i, v, value_size, t_values->uniq_num, ttl_ms);
     set_data(c->values, &new_value_data);
     drop_version(t_values_cur_v);
-}
-
-
-ht_data* prepare_inv_cache(key_info* key_i, size_t xid) {
-
-    ht_data* result;
-    data_version* table_values_cur_v;
-    table_data* table_values;
-    find_ht_data find_value;
-    find_value_key fv_key;
-
-    table_values_cur_v = get_table_column(key_i);
-    if (table_values_cur_v == NULL) {
-        return NULL;
-    }
-
-    table_values = table_values_cur_v->value;
-
-
-    fv_key.key = key_i->value;
-    fv_key.key_size = key_i->value_size;
-    fv_key.table_num = table_values->uniq_num;
-
-    find_value.find_key = &fv_key;
-    find_value.hash_key = key_i->full_key;
-    find_value.hash_key_size = key_i->full_size;
-
-    result = prepare_invalidate(c->values, &find_value, xid);
-    drop_version(table_values_cur_v);
-    return result;
 }
 
 int delete_cache(key_info* key_i) {

@@ -25,15 +25,15 @@ void* copy_table(void* value) {
 
 void free_data_table(ht_data* data) {
     find_table_key* find_key = data->find_key;
-    free(find_key->key);
-    free(data->find_key);
-    free(data);
+    shfree(find_key->key);
+    shfree(data->find_key);
+    shfree(data);
 }
 
 void value_free_table(void* value) {
     create_ht_data* data = (create_ht_data*)value;
     find_table_key* f_table =(find_table_key*)data->find_key;
-    free(f_table->key);
-    free(f_table);
-    free(data->value);
+    shfree(f_table->key);
+    shfree(f_table);
+    shfree(data->value);
 }
