@@ -170,6 +170,7 @@ static process_result do_set(client_req* cl_req, answer* answ, connection* conn)
             }
         }
         set_cache(key_i, res->res, res->size, ttl_ms);
+        free(res);
         answ->answer_size = def_resp.ok.answer_size;
         answ->answer = wcalloc(answ->answer_size  * sizeof(char));
         memcpy(answ->answer, def_resp.ok.answer, answ->answer_size);

@@ -58,7 +58,7 @@ void* copy_response(void* data) {
     return new_v;
 }
 
-void free_data_response( ht_data* data) {
+void free_data_response(ht_data* data) {
     find_value_key* find_key = data->find_key;
     shfree(find_key->key);
     shfree(data->find_key);

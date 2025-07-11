@@ -147,14 +147,14 @@ void init_meta_data(void) {
 
         cache_log(CACHE_DEBUG, "init_meta_data table %s count column %d", t->name, t->count_column);
 
-        t->columns = wcalloc(t->count_column  * sizeof(column));
+        t->columns = shalloc(t->count_column  * sizeof(column));
         for (int c = 0; c < t->count_column; ++c) {
             char* column_name = PQgetvalue(res, c, 0);
             char* is_key = PQgetvalue(res, c, 3);
             char* type = PQgetvalue(res, c, 1);
             int column_name_size = PQgetlength(res, c, 0);
 
-            t->columns[c].column_name = wcalloc((column_name_size + 1) * sizeof(char));
+            t->columns[c].column_name = shalloc((column_name_size + 1) * sizeof(char));
             memcpy(t->columns[c].column_name, column_name, column_name_size );
             t->columns[c].column_name[column_name_size] = '\0';
 

@@ -27,13 +27,17 @@ void* wcalloc(size_t size) {
 // return start mem into mark
 static void* add_end_mark(char* mem_pos, int size, bool is_free) {
     end_mark* start_m = (end_mark*)mem_pos;
-    end_mark* end_m = (end_mark*)(mem_pos + size);
+    end_mark* end_m = (end_mark*)(mem_pos + size + sizeof(end_mark));
 
-    start_m->is_free = true;
+    assert(size > 0);
+
+    start_m->is_free = is_free;
     start_m->size = size;
 
-    end_m->is_free = true;
+    end_m->is_free = is_free;
     end_m->size = size;
+
+    assert(((end_mark*)mem_pos)->size > 0);
 
     return mem_pos += sizeof(end_mark);
 }
@@ -52,6 +56,7 @@ static bool block_is_free(char* mem_pos, bool is_start) {
     end_mark* mark = (end_mark*)(mem_pos - sizeof(end_mark));
 
     if (!is_start) {
+        assert(mark->size > 0);
         mark = (end_mark*)(mem_pos + mark->size);
     }
 
@@ -63,6 +68,8 @@ static void add_free_node(free_node* node) {
     free_node* last_start = f_list->start;
     if (last_start) {
         last_start->prev = node;
+    } else {
+        f_list->cur = node;
     }
     node->prev = NULL;
     node->next = last_start;
@@ -72,9 +79,9 @@ static void add_free_node(free_node* node) {
 static void create_new_block(char* start_mem, int size, bool is_free) {
     char* cur_mem_pos;
 
-    assert(size >= MIN_SIZE_BLOCK);
+    assert(size >= sizeof(free_node));
 
-    cur_mem_pos = add_end_mark(start_mem, size, FREE_BLOCK);
+    cur_mem_pos = add_end_mark(start_mem, size, is_free);
     if (is_free) {
         add_free_node((free_node*)cur_mem_pos);
     }
@@ -113,14 +120,17 @@ void init_shared_allocator(void* mem, int size) {
 static void delete_free_node(free_node* node) {
     free_list* f_list = allocator->mem;
 
+    if (f_list->cur == node) {
+        f_list->cur = node->next;
+    }
+
     if (node->prev) {
         node->prev->next = node->next;
     } else {
-        cache_log(CACHE_INFO, "node %p", node);
         assert(node == f_list->start);
         f_list->start = node->next;
     }
-
+    //cache_log(CACHE_DEBUG, "delete_free_node: node->next %d", node->next);
     if (node->next) {
         node->next->prev = node->prev;
     }
@@ -143,11 +153,10 @@ static void* get_free_block(int size) {
             assert(next_node);
         }
 
-        if (get_block_size((char*)f_list->cur, FROM_BLOCK_START) >= size) {
+        //cache_log(CACHE_DEBUG, "get_free_block: block size %d \n", get_block_size((char*)f_list->cur, FROM_BLOCK_START));
+        if (get_block_size((char*)f_list->cur, FROM_BLOCK_START) >= size + 2 * sizeof(end_mark)) {
             free_node* find_node = f_list->cur;
             f_list->cur = next_node;
-
-            cache_log(CACHE_INFO, "get_free_block");
             delete_free_node(find_node);
 
             return find_node;
@@ -162,7 +171,7 @@ static void* get_free_block(int size) {
 static void* shared_allocator_alloc(int size) {
     char* free_block;
     int size_block;
-    int alloced_size;
+    int alloced_size = size > sizeof(free_list) ? size : sizeof(free_list) ;
     int err = pthread_mutex_lock(allocator->lock);
     if (err != 0) {
        cache_log(CACHE_ERROR,"shared_allocator_alloc: pthread_mutex_lock() failed: %s\n", strerror(err));
@@ -171,6 +180,7 @@ static void* shared_allocator_alloc(int size) {
     free_block = get_free_block(size);
 
     if (!free_block) {
+        cache_log(CACHE_DEBUG, "shared_allocator_alloc: can't find memmory block with size %d\n", size);
         err = pthread_mutex_unlock(allocator->lock);
         if (err != 0) {
             cache_log(CACHE_ERROR,"shared_allocator_alloc: pthread_mutex_unlock() failed: %s\n", strerror(err));
@@ -180,15 +190,16 @@ static void* shared_allocator_alloc(int size) {
 
     size_block = get_block_size(free_block, FROM_BLOCK_START);
 
-    if (size_block - size >= MIN_SIZE_BLOCK) {
-        int new_block_size = size_block - size - 2 * sizeof(end_mark);
-        char* new_free_block = free_block + size + sizeof(end_mark);
+    if (size_block - alloced_size >= MIN_SIZE_BLOCK) {
+        int new_block_size = size_block - alloced_size - 2 * sizeof(end_mark);
+        char* new_free_block = free_block + alloced_size + sizeof(end_mark);
 
         create_new_block(new_free_block, new_block_size, FREE_BLOCK);
     } else {
-        assert(size_block - size < 0);
+        assert(size_block - alloced_size  >= 0);
         alloced_size = size_block;
     }
+
     rewrite_block(free_block, alloced_size, ALLOCED_BLOCK);
 
     err = pthread_mutex_unlock(allocator->lock);
@@ -225,16 +236,21 @@ static void shared_allocator_free(void* ptr) {
     int end_size;
     neighbor_block neighbors;
 
+
+    assert(ptr >= (char*)allocator->mem + sizeof(free_list) && ptr <= (char*)allocator->mem + allocator->mem_size - sizeof(free_node) - sizeof(end_mark)); // it is shared allocator mem
     int err = pthread_mutex_lock(allocator->lock);
     if (err != 0) {
-       cache_log(CACHE_ERROR,"shared_allocator_free: pthread_mutex_lock() failed: %s\n", strerror(err));
+       cache_log(CACHE_ERROR,"shared_allocator_free: pthread_mutex_lock() failed: %s", strerror(err));
     }
+
+
+    //cache_log(CACHE_DEBUG, "shared free");
 
     start_size = get_block_size(ptr, FROM_BLOCK_START);
     end_size = get_block_size(ptr, FROM_BLOCK_END);
 
 
-    if (block_is_free(ptr, FROM_BLOCK_START) || block_is_free(ptr, FROM_BLOCK_END)) {
+    if (block_is_free((char*)ptr, FROM_BLOCK_START) || block_is_free((char*)ptr, FROM_BLOCK_END)) {
         cache_log(CACHE_ERROR, "shared_allocator_free: double free %p", ptr);
     }
 
@@ -248,7 +264,6 @@ static void shared_allocator_free(void* ptr) {
 
     if (neighbors.left && neighbors.left->is_free) {
         free_node* left_node = (free_node*)((char*)neighbors.left + sizeof(end_mark));
-        cache_log(CACHE_INFO, "neighbors.left");
         delete_free_node(left_node);
         free_block = (char*)neighbors.left + sizeof(end_mark);
         block_size += (neighbors.left)->size + 2 * sizeof(end_mark);
@@ -256,7 +271,6 @@ static void shared_allocator_free(void* ptr) {
 
     if (neighbors.rigth && neighbors.rigth->is_free) {
         free_node* right_node = (free_node*)((char*)neighbors.rigth + sizeof(end_mark));
-        cache_log(CACHE_INFO, "neighbors.rigth");
         delete_free_node(right_node);
         block_size += (neighbors.rigth)->size + 2 * sizeof(end_mark);
     }
@@ -272,7 +286,7 @@ static void shared_allocator_free(void* ptr) {
 void* shalloc(size_t size) {
     void* data = shared_allocator_alloc(size);
     if (data == NULL) {
-        cache_log(CACHE_ERROR, "init_worker: malloc error %s  - ", strerror(errno));
+        cache_log(CACHE_ERROR, "init_worker: shalloc error");
     }
     memset(data, 0, size);
     return data;

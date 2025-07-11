@@ -22,6 +22,7 @@ void init_shared_allocator(void* mem, int size);
 struct shared_allocator {
     void* mem;
     int mem_size;
+    int allocated_mem;
     pthread_mutex_t* lock;
 };
 

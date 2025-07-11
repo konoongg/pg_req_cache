@@ -127,6 +127,7 @@ static proc_status process_read_db(connection* conn) {
         if (cmd->reason == CACHE_UPDATE) {
             set_cache(cmd->key, res->res, res->size, 0);
         }
+        free(res);
         free_db_command(cmd);
         stop_event(dbw.wthrd->l, conn->r_data->handle);
 

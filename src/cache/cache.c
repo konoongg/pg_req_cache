@@ -72,10 +72,10 @@ static data_version* get_table_column(key_info* key_i) {
 static create_ht_data prepare_value(key_info*  key_i, cache_response* v, int value_size, int table_num, int ttl_ms) {
     create_ht_data new_value_data;
     find_value_key* f_value;
-    f_value = wcalloc(sizeof(find_value_key));
+    f_value = shalloc(sizeof(find_value_key));
     f_value->table_num = table_num;
     f_value->key_size = key_i->value_size;
-    f_value->key = wcalloc(f_value->key_size * sizeof(char));
+    f_value->key = shalloc(f_value->key_size * sizeof(char));
     memcpy(f_value->key, key_i->value, f_value->key_size);
     new_value_data.find_key = f_value;
     new_value_data.find_key_size = sizeof(find_value_key) + f_value->key_size;

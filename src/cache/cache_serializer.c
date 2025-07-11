@@ -16,48 +16,48 @@ typedef struct key_info key_info;
 
 static created_cache_respons* init_meta_ccr(int count_column, int count_tiuple) {
     created_cache_respons* ccr = wcalloc(sizeof(created_cache_respons));
-    cache_response* res = wcalloc(sizeof(cache_response));
+    cache_response* res = shalloc(sizeof(cache_response));
     ccr->size = sizeof(cache_response);
     ccr->res = res;
 
     res->count_fields = count_column;
     res->count_tuples = count_tiuple;
 
-    res->values = wcalloc(res->count_tuples * sizeof(cache_attr*));
+    res->values = shalloc(res->count_tuples * sizeof(cache_attr*));
     ccr->size += res->count_tuples * sizeof(cache_attr*);
 
-    (res->values)[0] = wcalloc(res->count_fields * sizeof(cache_attr));
+    (res->values)[0] = shalloc(res->count_fields * sizeof(cache_attr));
     ccr->size += res->count_fields * sizeof(cache_attr);
-    res->columns = wcalloc(res->count_fields  * sizeof(char*));
+    res->columns = shalloc(res->count_fields  * sizeof(char*));
     ccr->size += res->count_fields * sizeof(char*);
 
     return ccr;
 }
 
-created_cache_respons* create_respons_by_xlog(char* record, int record_size, size_t table_oid) {
-    table* t = get_table_info(table_oid);
-    created_cache_respons* ccr = init_meta_ccr(t->count_column, 1);
-    cache_response* res = wcalloc(sizeof(cache_response));
+// created_cache_respons* create_respons_by_xlog(char* record, int record_size, size_t table_oid) {
+//     table* t = get_table_info(table_oid);
+//     created_cache_respons* ccr = init_meta_ccr(t->count_column, 1);
+//     cache_response* res = shalloc(sizeof(cache_response));
 
-    int cur_pos = 0;
-    int cur_count_attr = 0;
-    while (cur_pos < record_size) {
-        if (record[cur_pos] & 1 ) {
-            int value_size = ((record[cur_pos] - 1) >> 1) - 1;
-            cur_pos +=  1;
+//     int cur_pos = 0;
+//     int cur_count_attr = 0;
+//     while (cur_pos < record_size) {
+//         if (record[cur_pos] & 1 ) {
+//             int value_size = ((record[cur_pos] - 1) >> 1) - 1;
+//             cur_pos +=  1;
 
-            res->columns[cur_count_attr] = get_column_info(t->name, (t->columns)[cur_count_attr].column_name);
+//             res->columns[cur_count_attr] = get_column_info(t->name, (t->columns)[cur_count_attr].column_name);
 
-            res->values[0][cur_count_attr].data->str.size = value_size;
-            res->values[0][cur_count_attr].data->str.str = wcalloc(value_size * sizeof(char));
-            ccr->size += res->values[0][cur_count_attr].data->str.size * sizeof(char);
-            memcpy(res->values[0][cur_count_attr].data->str.str, record + cur_pos, value_size);
-            cur_pos += value_size;
-            cur_count_attr++;
-        }
-    }
-    return ccr;
-}
+//             res->values[0][cur_count_attr].data->str.size = value_size;
+//             res->values[0][cur_count_attr].data->str.str = shalloc(value_size * sizeof(char));
+//             ccr->size += res->values[0][cur_count_attr].data->str.size * sizeof(char);
+//             memcpy(res->values[0][cur_count_attr].data->str.str, record + cur_pos, value_size);
+//             cur_pos += value_size;
+//             cur_count_attr++;
+//         }
+//     }
+//     return ccr;
+// }
 
 created_cache_respons* create_response_by_resp(char* table, char* value, int value_size) {
     created_cache_respons* ccr;
@@ -106,7 +106,7 @@ created_cache_respons* create_response_by_resp(char* table, char* value, int val
             memcpy(data, value + index_delim + 1, attr_size);
             data[attr_size] = '\0';
 
-            res->values[0][cur_count_attr].data = wcalloc(sizeof(db_data));
+            res->values[0][cur_count_attr].data = shalloc(sizeof(db_data));
             ccr->size += sizeof(db_data);
             switch (res->columns[cur_count_attr]->type) {
                 case INT:
@@ -114,7 +114,7 @@ created_cache_respons* create_response_by_resp(char* table, char* value, int val
                     break;
                 case STRING:
                     res->values[0][cur_count_attr].data->str.size = attr_size;
-                    res->values[0][cur_count_attr].data->str.str = wcalloc(attr_size * sizeof(char));
+                    res->values[0][cur_count_attr].data->str.str = shalloc(attr_size * sizeof(char));
                     ccr->size += res->values[0][cur_count_attr].data->str.size * sizeof(char);
                     memcpy(res->values[0][cur_count_attr].data->str.str, data, attr_size);
                     break;
@@ -138,9 +138,9 @@ created_cache_respons* create_response_by_pg(PGresult* result, char* table) {
     for (int column = 0; column < res->count_fields; ++column) {
         char* column_name = PQfname(result, column);
         if (column_name == NULL) {
-            free(res->values);
-            free(res->columns);
-            free(res);
+            shfree(res->values);
+            shfree(res->columns);
+            shfree(res);
             return NULL;
         }
         res->columns[column] = get_column_info(table, column_name);
@@ -150,7 +150,7 @@ created_cache_respons* create_response_by_pg(PGresult* result, char* table) {
     }
 
     for (int row = 0; row < res->count_tuples; ++row) {
-        res->values[row] = wcalloc(res->count_fields * sizeof(cache_attr));
+        res->values[row] = shalloc(res->count_fields * sizeof(cache_attr));
         ccr->size += res->count_fields * sizeof(cache_attr);
         for (int column = 0; column < res->count_fields; ++column) {
             char* value;
@@ -159,26 +159,26 @@ created_cache_respons* create_response_by_pg(PGresult* result, char* table) {
             value = PQgetvalue(result, row, column);
             if (value == NULL) {
                 for (int del_row = row; del_row >= row; del_row--) {
-                    free(res->values[del_row]);
+                    shfree(res->values[del_row]);
                 }
-                free(res->columns);
-                free(res->values);
-                free(res);
+                shfree(res->columns);
+                shfree(res->values);
+                shfree(res);
                 return NULL;
             }
 
             value_size = PQgetlength(result, row, column);
             if (value_size == 0) {
                 for (int del_row = row; del_row >= row; del_row--) {
-                    free(res->values[del_row]);
+                    shfree(res->values[del_row]);
                 }
-                free(res->columns);
-                free(res->values);
-                free(res);
+                shfree(res->columns);
+                shfree(res->values);
+                shfree(res);
                 return NULL;
             }
 
-            res->values[row][column].data = wcalloc(sizeof(db_data));
+            res->values[row][column].data = shalloc(sizeof(db_data));
             ccr->size += sizeof(db_data);
             switch (res->columns[column]->type) {
                 case INT:
@@ -186,7 +186,7 @@ created_cache_respons* create_response_by_pg(PGresult* result, char* table) {
                     break;
                 case STRING:
                     res->values[row][column].data->str.size = value_size;
-                    res->values[row][column].data->str.str = wcalloc(value_size * sizeof(char));
+                    res->values[row][column].data->str.str = shalloc(value_size * sizeof(char));
                     ccr->size += res->values[row][column].data->str.size * sizeof(char);
                     memcpy(res->values[row][column].data->str.str, value, value_size);
                     break;
@@ -196,71 +196,6 @@ created_cache_respons* create_response_by_pg(PGresult* result, char* table) {
     ccr->res->prepare_answer_valid = false;
     ccr->res->updated = false;
     return ccr;
-}
-
-key_info* create_key_info_by_record(size_t table_oid, char* record) {
-    key_info* key_i = wcalloc(sizeof(key_info));
-    column* c;
-    table* t;
-    int offset = 0;
-
-    key_i->direct = false;
-    t = get_table_info(table_oid);
-    if (t == NULL) {
-        cache_log(CACHE_ERROR, "create_key_info_by_record: wrong table oid %d", table_oid);
-    }
-
-    key_i->table_size = strlen(t->name);
-    key_i->table = wcalloc( (key_i->table_size + 1) * sizeof(char));
-    memcpy(key_i->table, t->name, key_i->table_size);
-    key_i->table[key_i->table_size] = '\0';
-
-    c = get_key_column(table_oid);
-
-    if (c == NULL) {
-        cache_log(CACHE_ERROR, "create_key_info_by_record: wrong table oid %d - can't find key column", table_oid);
-    }
-
-    key_i->column_size = strlen(c->column_name);
-    key_i->column = wcalloc((key_i->column_size + 1) * sizeof(char));
-    memcpy(key_i->column, c->column_name, key_i->column_size);
-    key_i->column[key_i->column_size] = '\0';
-
-    if (record[0] & 1) {
-        key_i->value_size = ((record[0] - 1) >> 1) - 1;
-        key_i->value = wcalloc((key_i->value_size + 1) * sizeof(char));
-        memcpy(key_i->value, record + 1, key_i->column_size);
-        key_i->value[key_i->value_size] = '\0';
-    } else {
-        cache_log(CACHE_WARNING, "create_key_info_by_record: undefined record header size");
-        return NULL;
-    }
-
-
-    key_i->table_column_size = key_i->table_size + 1 + key_i->column_size;
-    key_i->table_column = wcalloc(sizeof(key_i->table_column_size + 1) * sizeof(char));
-    memcpy(key_i->table_column, t->name, key_i->table_size);
-    offset = key_i->table_size;
-    key_i->table_column[offset] = '.';
-    offset++;
-    memcpy(key_i->table_column + offset , c->column_name,  key_i->column_size);
-    key_i->table_column[key_i->table_column_size] = '\0';
-
-    offset = 0;
-    key_i->full_size = key_i->table_size + 1 + key_i->column_size + 1 + key_i->value_size;
-    key_i->full_key = wcalloc((key_i->full_size+ 1) * sizeof(char));
-    memcpy(key_i->full_key, t->name, key_i->table_size);
-    offset += key_i->table_size;
-    key_i->full_key[offset] = '.';
-    offset++;
-    memcpy(key_i->full_key + offset , c->column_name,  key_i->column_size);
-    offset += key_i->column_size;
-    key_i->full_key[offset] = '.';
-    offset++;
-    memcpy(key_i->full_key + offset , key_i->value,  key_i->value_size);
-    key_i->full_key[key_i->full_size] = '\0';
-
-    return key_i;
 }
 
 key_info* create_key_info(char* key, int key_size) {
