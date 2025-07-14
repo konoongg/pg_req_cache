@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "postgres.h"
 
@@ -14,6 +15,8 @@
 #define FROM_BLOCK_END false
 
 shared_allocator* allocator;
+
+
 
 void* wcalloc(size_t size) {
     void* data = malloc(size);
@@ -121,7 +124,10 @@ static void delete_free_node(free_node* node) {
     free_list* f_list = allocator->mem;
 
     if (f_list->cur == node) {
-        f_list->cur = node->next;
+        f_list->cur = f_list->cur->next;
+        if (f_list->cur == NULL) {
+            f_list->cur = f_list->start;
+        }
     }
 
     if (node->prev) {
@@ -150,11 +156,10 @@ static void* get_free_block(int size) {
         free_node* next_node = f_list->cur->next;
         if (next_node == NULL) {
             next_node = f_list->start;
-            assert(next_node);
         }
 
         //cache_log(CACHE_DEBUG, "get_free_block: block size %d \n", get_block_size((char*)f_list->cur, FROM_BLOCK_START));
-        if (get_block_size((char*)f_list->cur, FROM_BLOCK_START) >= size + 2 * sizeof(end_mark)) {
+        if (get_block_size((char*)f_list->cur, FROM_BLOCK_START) >= size) {
             free_node* find_node = f_list->cur;
             f_list->cur = next_node;
             delete_free_node(find_node);
@@ -188,6 +193,8 @@ static void* shared_allocator_alloc(int size) {
         return NULL;
     }
 
+
+
     size_block = get_block_size(free_block, FROM_BLOCK_START);
 
     if (size_block - alloced_size >= MIN_SIZE_BLOCK) {
@@ -218,7 +225,7 @@ static neighbor_block get_neighbor (char* block) {
     neighbors.rigth = (end_mark*)(block + block_size + sizeof(end_mark));
     neighbors.left = (end_mark*)(block - left_block_size  - 3 * sizeof(end_mark));
 
-    if ((char*)neighbors.rigth > (char*)allocator->mem + allocator->mem_size) {
+    if ((char*)neighbors.rigth >= (char*)allocator->mem + allocator->mem_size) {
         neighbors.rigth = NULL;
     }
 
@@ -234,17 +241,16 @@ static void shared_allocator_free(void* ptr) {
     int block_size;
     int start_size;
     int end_size;
+    int err;
     neighbor_block neighbors;
 
 
-    assert(ptr >= (char*)allocator->mem + sizeof(free_list) && ptr <= (char*)allocator->mem + allocator->mem_size - sizeof(free_node) - sizeof(end_mark)); // it is shared allocator mem
-    int err = pthread_mutex_lock(allocator->lock);
+    assert((char*)ptr >= (char*)allocator->mem + sizeof(free_list) && (char*)ptr <= (char*)allocator->mem + allocator->mem_size - sizeof(free_node) - sizeof(end_mark)); // it is shared allocator mem
+    err = pthread_mutex_lock(allocator->lock);
     if (err != 0) {
        cache_log(CACHE_ERROR,"shared_allocator_free: pthread_mutex_lock() failed: %s", strerror(err));
     }
 
-
-    //cache_log(CACHE_DEBUG, "shared free");
 
     start_size = get_block_size(ptr, FROM_BLOCK_START);
     end_size = get_block_size(ptr, FROM_BLOCK_END);
@@ -265,7 +271,8 @@ static void shared_allocator_free(void* ptr) {
     if (neighbors.left && neighbors.left->is_free) {
         free_node* left_node = (free_node*)((char*)neighbors.left + sizeof(end_mark));
         delete_free_node(left_node);
-        free_block = (char*)neighbors.left + sizeof(end_mark);
+        //cache_log(CACHE_DEBUG, "shared_allocator_free left_node %p (neighbors.left)->size %d\n", left_node, (neighbors.left)->size);
+        free_block = (char*)left_node;
         block_size += (neighbors.left)->size + 2 * sizeof(end_mark);
     }
 
@@ -286,7 +293,7 @@ static void shared_allocator_free(void* ptr) {
 void* shalloc(size_t size) {
     void* data = shared_allocator_alloc(size);
     if (data == NULL) {
-        cache_log(CACHE_ERROR, "init_worker: shalloc error");
+        cache_log(CACHE_ERROR, "init_worker: shalloc error allocated ");
     }
     memset(data, 0, size);
     return data;

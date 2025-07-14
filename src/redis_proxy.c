@@ -3,6 +3,8 @@
 
 #include "postgres.h"
 
+#include "executor/executor.h"
+#include "access/xact.h"
 #include "fmgr.h"
 #include "miscadmin.h"
 #include "postmaster/bgworker.h"
@@ -36,6 +38,7 @@ extern cache* c;
 
 static shmem_request_hook_type prev_shmem_request_hook = NULL;
 static shmem_startup_hook_type prev_shmem_startup_hook = NULL;
+static ExecutorFinish_hook_type prev_ExecutorFinish = NULL;
 
 void _PG_init(void) {
     register_proxy();
@@ -66,6 +69,20 @@ static void req_cache_shmem_startup(void) {
     }
 }
 
+static void req_cache_ExecutorFinish(QueryDesc* queryDesc) {
+
+    if (prev_ExecutorFinish) {
+    	prev_ExecutorFinish(queryDesc);
+    } else {
+    	standard_ExecutorFinish(queryDesc);
+    }
+    inv_process_command(queryDesc);
+}
+
+static void req_cache_xact_cb(XactEvent event, void *arg) {
+    inv_process_xact(event, arg);
+}
+
 static void register_proxy(void) {
     BackgroundWorker worker;
 
@@ -83,6 +100,11 @@ static void register_proxy(void) {
     strncpy(worker.bgw_type, "redis proxy server", 19);
     worker.bgw_restart_time = BGW_NEVER_RESTART;
     RegisterBackgroundWorker(&worker);
+
+    prev_ExecutorFinish = ExecutorFinish_hook;
+	ExecutorFinish_hook = req_cache_ExecutorFinish;
+
+    RegisterXactCallback(req_cache_xact_cb, NULL);
 }
 
 /*

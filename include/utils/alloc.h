@@ -36,7 +36,7 @@ struct end_mark {
     int size;
     bool is_free;
 };
-#pragma pack(pop) 
+#pragma pack(pop)
 
 
 struct free_node {

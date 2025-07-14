@@ -8,7 +8,6 @@
 #include "alloc.h"
 #include "config.h"
 #include "ht.h"
-#include "invalid_pool.h"
 #include "logger.h"
 
 #define write_lock false
