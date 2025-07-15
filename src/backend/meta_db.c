@@ -210,10 +210,10 @@ bool table_filter(size_t oid) {
     return get_table_info(oid);
 }
 
-table* get_table_info(size_t oid) {
+table* get_table_info(char* table_name) {
      for (int i = 0; i < meta->count_tables; ++i) {
         table* t  = &(meta->tables[i]);
-        if (t->oid == oid) {
+        if (strcmp(table_name, t->name) == 0) {
             return t;
         }
     }
@@ -226,6 +226,17 @@ column* get_key_column(size_t table_oid) {
         column* c = &(t->columns[j]);
         if (c->is_key) {
             return c;
+        }
+    }
+    return NULL;
+}
+
+int get_column_index(char* column_name, char* table_name) {
+    table* t = get_table_info(table_name);
+    for (int j = 0; j < t->count_column; ++j) {
+        column* c = &(t->columns[j]);
+        if (strcmp(column_name, c->column_name) == 0) {
+            return j;
         }
     }
     return NULL;

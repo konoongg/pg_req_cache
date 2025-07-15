@@ -34,6 +34,13 @@ void clean_up(void);
 
 config_cache config;
 statistics stats;
+
+struct shared_struct {
+    cache* c;
+    shared_allocator* allocator;
+    
+};
+
 extern cache* c;
 
 static shmem_request_hook_type prev_shmem_request_hook = NULL;

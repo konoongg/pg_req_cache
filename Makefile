@@ -9,6 +9,7 @@ OBJS = \
 	$(WIN32RES) \
 	src/backend/db.o \
 	src/backend/meta_db.o \
+	src/backend/parse_pg_command.o \
 	src/backend/pg_req_creater.o \
 	src/cache/cache_gc.o \
 	src/cache/cache_serializer.o \
@@ -26,6 +27,7 @@ OBJS = \
 	src/hash_table/ht_table_type.o \
 	src/hash_table/ht.o \
 	src/invalidation/invalid.o \
+	src/invalidation/invalid_trans.o \
 	src/redis_proxy.o \
 	src/resp_creater.o \
 	src/stats.o \

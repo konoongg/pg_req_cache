@@ -4,6 +4,7 @@
 #include "stdbool.h"
 
 typedef enum db_type db_type;
+typedef enum pg_command pg_command;
 typedef struct cache_attr cache_attr;
 typedef struct cache_response cache_response;
 typedef struct column column;
@@ -17,7 +18,7 @@ struct cache_attr {
 
 struct cache_response {
     cache_attr** values;
-    column** columns; // сохраняем просто сылку, на структуру, которую проинициализоали 
+    column** columns; // сохраняем просто сылку, на структуру, которую проинициализоали
     int count_fields;
     int count_tuples;
 
@@ -25,13 +26,16 @@ struct cache_response {
     int prepare_answer_size;
     bool prepare_answer_valid;
     bool updated; // кажется это поле больше не нужно, так как с версионностью неикто не может обноить конкретную версию
-
-    
 };
 
 struct created_cache_respons {
     cache_response* res;
     int size;
+};
+
+enum pg_command {
+    DELETE,
+    UPDATE,
 };
 
 enum db_type {

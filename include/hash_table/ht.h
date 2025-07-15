@@ -5,6 +5,7 @@
 #include <time.h>
 #include <stdatomic.h>
 
+typedef enum invalid_status invalid_status;
 typedef enum invalidate_mode invalidate_mode;
 typedef struct create_ht_data create_ht_data;
 typedef struct create_ht_info create_ht_info;
@@ -30,6 +31,12 @@ struct data_version {
     bool dirty;
     data_version* next;
     void* value;
+};
+
+enum invalid_status {
+    VALID,
+    INVALID,
+    UNKNOWN,
 };
 
 /*
@@ -60,6 +67,10 @@ struct ht_data {
     time_t last_time;
     size_t expire_ms;
     size_t ht_data_size;
+
+    data_version* inv_value;
+    _Atomic size_t xid_inv;
+    _Atomic invalid_status invalidated;
 };
 
 struct create_ht_info {

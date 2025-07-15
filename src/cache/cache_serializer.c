@@ -8,6 +8,7 @@
 #include "cache_serializer.h"
 #include "logger.h"
 #include "meta_db.h"
+#include "parse_pg_command.h"
 #include "storage_data.h"
 
 extern config_cache config;
@@ -33,31 +34,6 @@ static created_cache_respons* init_meta_ccr(int count_column, int count_tiuple) 
 
     return ccr;
 }
-
-// created_cache_respons* create_respons_by_xlog(char* record, int record_size, size_t table_oid) {
-//     table* t = get_table_info(table_oid);
-//     created_cache_respons* ccr = init_meta_ccr(t->count_column, 1);
-//     cache_response* res = shalloc(sizeof(cache_response));
-
-//     int cur_pos = 0;
-//     int cur_count_attr = 0;
-//     while (cur_pos < record_size) {
-//         if (record[cur_pos] & 1 ) {
-//             int value_size = ((record[cur_pos] - 1) >> 1) - 1;
-//             cur_pos +=  1;
-
-//             res->columns[cur_count_attr] = get_column_info(t->name, (t->columns)[cur_count_attr].column_name);
-
-//             res->values[0][cur_count_attr].data->str.size = value_size;
-//             res->values[0][cur_count_attr].data->str.str = shalloc(value_size * sizeof(char));
-//             ccr->size += res->values[0][cur_count_attr].data->str.size * sizeof(char);
-//             memcpy(res->values[0][cur_count_attr].data->str.str, record + cur_pos, value_size);
-//             cur_pos += value_size;
-//             cur_count_attr++;
-//         }
-//     }
-//     return ccr;
-// }
 
 created_cache_respons* create_response_by_resp(char* table, char* value, int value_size) {
     created_cache_respons* ccr;
@@ -124,8 +100,11 @@ created_cache_respons* create_response_by_resp(char* table, char* value, int val
             start_pos = cur_pos + 1;
         }
     }
-    ccr->res->prepare_answer_valid = false;
-    ccr->res->updated = false;
+
+    res->prepare_answer_valid = false;
+    res->updated = false;
+    res->prepare_answer_size = 0;
+
     return ccr;
 }
 
@@ -193,8 +172,43 @@ created_cache_respons* create_response_by_pg(PGresult* result, char* table) {
             }
         }
     }
-    ccr->res->prepare_answer_valid = false;
-    ccr->res->updated = false;
+
+    res->prepare_answer_valid = false;
+    res->updated = false;
+    res->prepare_answer_size = 0;
+
+    return ccr;
+}
+
+
+created_cache_respons* create_response_by_pg_command(pg_parse_data* req) {
+    table* t = get_table_info(req->table_name);
+    created_cache_respons* ccr = init_meta_ccr(t->count_column, 1);
+    cache_response* res = ccr->res;
+
+    for (int i = 0; i < req->count_pars_column; ++i) {
+        column* c = req->columns[i];
+        int c_index = get_column_index(c->column_name, req->table_name);
+        res->columns[c_index] = c;
+        res->values[0][c_index] = shalloc(sizeof(db_data));
+
+        switch (c->type) {
+            case INT:
+                res->values[0][c_index].data->num = (int)strtol(req->value, NULL, 10);
+                break;
+            case STRING:
+                res->values[0][c_index].data->str.size = req->value_size;
+                res->values[0][c_index].data->str.str = shalloc(req->value_size * sizeof(char));
+                ccr->size += res->values[0][c_index].data->str.size * sizeof(char);
+                memcpy(res->values[0][c_index].data->str.str, req->value, req->value_size);
+                break;
+        }
+    }
+
+    res->prepare_answer_valid = false;
+    res->updated = false;
+    res->prepare_answer_size = 0;
+
     return ccr;
 }
 
@@ -255,6 +269,60 @@ key_info* create_key_info(char* key, int key_size) {
     key_i->value = wcalloc((key_i->value_size + 1) * sizeof(char));
     memcpy(key_i->value, dot_position_s + 1, key_i->value_size);
     key_i->value[key_i->value_size] = '\0';
+
+    return key_i;
+}
+
+key_info* create_key_info_by_pg_command(pg_parse_data* req) {
+    key_info* key_i = wcalloc(sizeof(key_info));
+    column* c;
+    int offset = 0;
+
+    key_i->direct = false;
+
+    key_i->table_size = strlen(req->table_name);
+    key_i->table = wcalloc((key_i->table_size + 1) * sizeof(char));
+    memcpy(key_i->table, req.table_name, key_i->table_size);
+    key_i->table[key_i->table_size] = '\0';
+
+    c = req->key_column;
+
+    if (c == NULL) {
+        cache_log(CACHE_ERROR, "create_key_info_by_record: wrong table oid %d - can't find key column", table_oid);
+    }
+
+    key_i->column_size = strlen(c->column_name);
+    key_i->column = wcalloc((key_i->column_size + 1) * sizeof(char));
+    memcpy(key_i->column, c->column_name, key_i->column_size);
+    key_i->column[key_i->column_size] = '\0';
+
+    key_i->value_size = req->value_size;
+    key_i->value = wcalloc((key_i->value_size + 1) * sizeof(char));
+    memcpy(key_i->value, req->columns, key_i->column_size);
+    key_i->value[key_i->value_size] = '\0';
+
+    key_i->table_column_size = key_i->table_size + 1 + key_i->column_size;
+    key_i->table_column = wcalloc(sizeof(key_i->table_column_size + 1) * sizeof(char));
+    memcpy(key_i->table_column, t->name, key_i->table_size);
+    offset = key_i->table_size;
+    key_i->table_column[offset] = '.';
+    offset++;
+    memcpy(key_i->table_column + offset , c->column_name,  key_i->column_size);
+    key_i->table_column[key_i->table_column_size] = '\0';
+
+    offset = 0;
+    key_i->full_size = key_i->table_size + 1 + key_i->column_size + 1 + key_i->value_size;
+    key_i->full_key = wcalloc((key_i->full_size+ 1) * sizeof(char));
+    memcpy(key_i->full_key, t->name, key_i->table_size);
+    offset += key_i->table_size;
+    key_i->full_key[offset] = '.';
+    offset++;
+    memcpy(key_i->full_key + offset , c->column_name,  key_i->column_size);
+    offset += key_i->column_size;
+    key_i->full_key[offset] = '.';
+    offset++;
+    memcpy(key_i->full_key + offset , key_i->value,  key_i->value_size);
+    key_i->full_key[key_i->full_size] = '\0';
 
     return key_i;
 }
