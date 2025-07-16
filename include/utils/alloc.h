@@ -8,7 +8,6 @@
 #define MIN_ALLOCATOR_SIZE (sizeof(free_list) + 2 * sizeof(end_mark) +  sizeof(free_list))
 #define MIN_SIZE_BLOCK sizeof(free_node) + 2 * sizeof(end_mark)
 
-typedef struct shared_allocator shared_allocator;
 typedef struct free_node free_node;
 typedef struct free_list free_list;
 typedef struct neighbor_block neighbor_block;
@@ -18,13 +17,6 @@ void shfree(void* ptr);
 void* shalloc(size_t size);
 void* wcalloc(uint64_t size);
 void init_shared_allocator(void* mem, int size);
-
-struct shared_allocator {
-    void* mem;
-    int mem_size;
-    int allocated_mem;
-    pthread_mutex_t* lock;
-};
 
 struct neighbor_block {
     end_mark* left;

@@ -7,6 +7,7 @@
 
 #include "alloc.h"
 #include "logger.h"
+#include "shmem.h"
 
 #define FREE_BLOCK true
 #define ALLOCED_BLOCK false
@@ -14,9 +15,9 @@
 #define FROM_BLOCK_START true
 #define FROM_BLOCK_END false
 
+extern shared_struct* shmem_data;
+
 shared_allocator* allocator;
-
-
 
 void* wcalloc(size_t size) {
     void* data = malloc(size);
@@ -96,6 +97,7 @@ static void rewrite_block(char* start_mem, int size, bool is_free) {
 
 void init_shared_allocator(void* mem, int size) {
     free_list* f_list = (free_list*)mem;
+    allocator = &(shmem_data->allocator);
     int err;
 
     if (size < MIN_ALLOCATOR_SIZE ) {
@@ -104,16 +106,8 @@ void init_shared_allocator(void* mem, int size) {
 
     memset(mem, 0, size);
 
-    allocator = wcalloc(sizeof(shared_allocator));
     allocator->mem = mem;
     allocator->mem_size = size;
-    allocator->lock = wcalloc(sizeof(pthread_mutex_t));
-
-    err = pthread_mutex_init(allocator->lock, NULL);
-    if (err != 0){
-       cache_log(CACHE_ERROR, "queue_init: pthread_mutex_init() failed: %s\n", strerror(err));
-    }
-
 
     create_new_block((char*)mem + sizeof(free_list), size - sizeof(free_list) - 2 * sizeof(end_mark), FREE_BLOCK);
 

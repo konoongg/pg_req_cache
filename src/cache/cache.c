@@ -24,16 +24,20 @@
 #include "ht_table_type.h"
 #include "ht.h"
 #include "logger.h"
+#include "shmem.h"
 #include "storage_data.h"
 
 cache* c;
 extern config_cache config;
+extern shared_struct* shmem_data;
 
 void init_cache(void) {
     create_ht_info ht_table_info;
     create_ht_info ht_value_info;
 
     atomic_store(&c->table_max_num, 0);
+
+    c = shmem_data->c = shalloc(sizeof(cache));
 
     ht_table_info.cmp_key = cmp_table_key;
     ht_table_info.copy = copy_table;
@@ -125,10 +129,10 @@ static data_version* get_or_create_table(key_info* key_i) {
     while (t_values_cur_v == NULL) {
         create_ht_data new_table_data;
         table_data* td;
-        find_table_key* f_table = wcalloc(sizeof(find_table_key));
+        find_table_key* f_table = shalloc(sizeof(find_table_key));
 
         f_table->key_size = key_i->table_column_size;
-        f_table->key = wcalloc(f_table->key_size * sizeof(char));
+        f_table->key = shalloc(f_table->key_size * sizeof(char));
         memcpy(f_table->key, key_i->table_column, f_table->key_size);
 
         new_table_data.find_key = f_table;
@@ -137,7 +141,7 @@ static data_version* get_or_create_table(key_info* key_i) {
         new_table_data.hash_key = key_i->table_column;
         new_table_data.expire_ms = 0;
 
-        td = wcalloc(sizeof(table_data));
+        td = shalloc(sizeof(table_data));
         td->uniq_num = atomic_fetch_add(&(c->table_max_num), 1);
         new_table_data.value = td;
         new_table_data.value_size = sizeof(table_data);
@@ -159,6 +163,23 @@ void set_cache(key_info* key_i, cache_response* v, int value_size, int ttl_ms) {
     create_ht_data new_value_data = prepare_value(key_i, v, value_size, t_values->uniq_num, ttl_ms);
     set_data(c->values, &new_value_data);
     drop_version(t_values_cur_v);
+}
+
+size_t invalidate_cache(key_info* key_i, cache_response* v, int value_size, size_t xid) {
+    ht_data* result;
+    data_version* table_values_cur_v;
+    table_data* table_values;
+    find_ht_data find_value;
+    find_value_key fv_key;
+
+    table_values_cur_v = get_table_column(key_i);
+    if (table_values_cur_v == NULL) {
+        return NULL;
+    }
+
+    
+    drop_version(table_values_cur_v);
+    return result;
 }
 
 int delete_cache(key_info* key_i) {

@@ -217,12 +217,10 @@ void destroy_ht(hash_table* ht) {
     shfree(ht);
 }
 
-
 void drop_version(data_version* version) {
     atomic_fetch_sub(&(version->usage_counter), 1);
     assert(version->usage_counter >= 0);
 }
-
 
 data_version* get_data(hash_table* ht, find_ht_data* find) {
     ht_basket* basket;
@@ -240,6 +238,69 @@ data_version* get_data(hash_table* ht, find_ht_data* find) {
     basket_unlock(basket);
     return result;
 }
+
+// size_t prepare_invalidate(hash_table* ht, create_ht_data* new_data, size_t new_inv_xid) {
+//     ht_basket* basket;
+//     ht_data* data;
+//     size_t old_xid;
+
+//     basket = get_basket(ht, new_data->hash_key, new_data->hash_key_size);
+//     basket_lock(basket, write_lock);
+
+//     data = find_data_in_basket(ht, basket, new_data->find_key, WITH_TLL);
+
+//     if (data == NULL) {
+//         basket_unlock(basket);
+//         return -1;
+//     }
+
+//     if (data->inv_value) {
+//         switch (data->inv_status) {
+//             case VALID:
+//                 shfree(data->inv_value);
+//                 break;
+//             case INVALID:
+//                 data->value_cur->next = data->inv_value;
+//                 break;
+//             case UNKNOWN:
+//                 cache_log(CACHE_ERROR, "prepare_invalidate: prev transaction was not completed");
+//         }
+//     }
+
+//     data->inv_value = shalloc(sizeof(data_version));
+
+//     old_xid = data->xid_inv;
+//     data->xid_inv = new_inv_xid;
+//     data->inv_status = UNKNOWN;
+
+//     basket_unlock(basket);
+//     return old_xid;
+// }
+
+//If we find a record, we mark it as invalid so that the garbage collector cannot delete it
+data_version* prepare_invalidate(hash_table* ht, find_ht_data* find, size_t xid) {
+    ht_basket* basket;
+    ht_data* data;
+    int data_size;
+
+    basket = get_basket(ht, find->hash_key, find->hash_key_size);
+
+    basket_lock(basket, write_lock);
+
+    data = find_data_in_basket(ht, basket, find->find_key, WITHOUT_TLL);
+    if (data == NULL) {
+        basket_unlock(basket);
+        return NULL;
+    }
+
+    data->xid_inv = xid;
+    data->inv_status = UNKNOWN;
+    atomic_fetch_add(&(data->value_cur->usage_counter), 1);
+
+    basket_unlock(basket);
+    return data->value_cur;
+}
+
 
 void set_data(hash_table* ht, create_ht_data* new_data) {
     ht_basket* basket;

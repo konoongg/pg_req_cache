@@ -26,13 +26,14 @@ OBJS = \
 	src/hash_table/ht_response_type.o \
 	src/hash_table/ht_table_type.o \
 	src/hash_table/ht.o \
-	src/invalidation/invalid.o \
 	src/invalidation/invalid_trans.o \
+	src/invalidation/invalid.o \
 	src/redis_proxy.o \
 	src/resp_creater.o \
 	src/stats.o \
 	src/utils/alloc.o \
 	src/utils/logger.o \
+	src/utils/shmem.o \
 	src/worker.o
 
 

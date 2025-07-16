@@ -70,7 +70,7 @@ struct ht_data {
 
     data_version* inv_value;
     _Atomic size_t xid_inv;
-    _Atomic invalid_status invalidated;
+    _Atomic invalid_status inv_status;
 };
 
 struct create_ht_info {

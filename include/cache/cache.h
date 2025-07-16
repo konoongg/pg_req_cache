@@ -14,13 +14,12 @@
 typedef struct cache cache;
 
 data_version* get_cache(key_info* key_i);
-ht_data* prepare_inv_cache(key_info* key_i, size_t xid);
+bool prepare_inv_cache(key_info* key_i, cache_response* v, int value_size, size_t xid);
 int delete_cache(key_info* key_i);
 size_t get_cur_cache_size(void);
 void cache_clean(int del_time_s);
 void free_cache(void);
 void init_cache(void);
-void invalidate_cache(key_info* key_i, cache_response* v, int value_size, invalidate_mode mode);
 void set_cache(key_info* key_i, cache_response* v, int value_size, int ttl_ms);
 
 struct cache {

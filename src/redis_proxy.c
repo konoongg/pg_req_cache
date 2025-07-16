@@ -14,13 +14,13 @@
 
 #include "alloc.h"
 #include "cache_gc.h"
-#include "cache.h"
 #include "command_processor.h"
 #include "config.h"
-#include "invalidation/invalid.h"
+#include "invalid_trans.h"
 #include "logger.h"
 #include "query_cache_controller.h"
 #include "resp_creater.h"
+#include "shmem.h"
 #include "socket_wrapper.h"
 #include "stats.h"
 #include "worker.h"
@@ -35,13 +35,7 @@ void clean_up(void);
 config_cache config;
 statistics stats;
 
-struct shared_struct {
-    cache* c;
-    shared_allocator* allocator;
-    
-};
-
-extern cache* c;
+shared_struct* shmem_data;
 
 static shmem_request_hook_type prev_shmem_request_hook = NULL;
 static shmem_startup_hook_type prev_shmem_startup_hook = NULL;
@@ -69,7 +63,7 @@ static void req_cache_shmem_startup(void) {
     }
 
     //this hook is called before postmaster starts accepting connections, so no blocking is needed
-    c = ShmemInitStruct("pg_req_cache", sizeof(cache) + config.c_conf.max_storage_size, &found);
+    shmem_data = ShmemInitStruct("pg_req_cache", sizeof(cache) + sizeof(shared_allocator) + config.c_conf.max_storage_size, &found);
 
     if (found) {
         cache_log(CACHE_WARNING, "pg_req_cache already exist");
@@ -122,7 +116,10 @@ static void register_proxy(void) {
 void proxy_start_work(Datum main_arg) {
     cache_log(CACHE_INFO, "start bg worker pg_redis_proxy pid");
 
-    init_shared_allocator(c + sizeof(cache), config.c_conf.max_storage_size);
+    init_shmem();
+    cache_log(CACHE_INFO, "finish init shmem struct");
+
+    init_shared_allocator(shmem_data + sizeof(shared_struct), config.c_conf.max_storage_size);
     cache_log(CACHE_INFO, "finish init allocator");
 
     init_stats();
