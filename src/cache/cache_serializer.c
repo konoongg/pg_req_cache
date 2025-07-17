@@ -186,21 +186,26 @@ created_cache_respons* create_response_by_pg_command(pg_parse_data* req) {
     created_cache_respons* ccr = init_meta_ccr(t->count_column, 1);
     cache_response* res = ccr->res;
 
+    res->values[0] = shalloc(res->count_fields * sizeof(cache_attr));
     for (int i = 0; i < req->count_pars_column; ++i) {
         column* c = req->columns[i];
         int c_index = get_column_index(c->column_name, req->table_name);
+
+        if (c_index == -1) {
+            cache_log(CACHE_ERROR, "create_response_by_pg_command: can't find column %s in table %s", c->column_name, req->table_name);
+        }
+
         res->columns[c_index] = c;
-        res->values[0][c_index] = shalloc(sizeof(db_data));
 
         switch (c->type) {
             case INT:
-                res->values[0][c_index].data->num = (int)strtol(req->value, NULL, 10);
+                res->values[0][c_index].data->num = (int)strtol(req->value[i], NULL, 10);
                 break;
             case STRING:
-                res->values[0][c_index].data->str.size = req->value_size;
-                res->values[0][c_index].data->str.str = shalloc(req->value_size * sizeof(char));
+                res->values[0][c_index].data->str.size = req->value_size[i];
+                res->values[0][c_index].data->str.str = shalloc(req->value_size[i] * sizeof(char));
                 ccr->size += res->values[0][c_index].data->str.size * sizeof(char);
-                memcpy(res->values[0][c_index].data->str.str, req->value, req->value_size);
+                memcpy(res->values[0][c_index].data->str.str, req->value, req->value_size[i]);
                 break;
         }
     }
@@ -282,13 +287,13 @@ key_info* create_key_info_by_pg_command(pg_parse_data* req) {
 
     key_i->table_size = strlen(req->table_name);
     key_i->table = wcalloc((key_i->table_size + 1) * sizeof(char));
-    memcpy(key_i->table, req.table_name, key_i->table_size);
+    memcpy(key_i->table, req->table_name, key_i->table_size);
     key_i->table[key_i->table_size] = '\0';
 
     c = req->key_column;
 
     if (c == NULL) {
-        cache_log(CACHE_ERROR, "create_key_info_by_record: wrong table oid %d - can't find key column", table_oid);
+        cache_log(CACHE_ERROR, "create_key_info_by_record: wrong table name %s - can't find key column", req->table_name);
     }
 
     key_i->column_size = strlen(c->column_name);
@@ -296,14 +301,14 @@ key_info* create_key_info_by_pg_command(pg_parse_data* req) {
     memcpy(key_i->column, c->column_name, key_i->column_size);
     key_i->column[key_i->column_size] = '\0';
 
-    key_i->value_size = req->value_size;
+    key_i->value_size = req->key_value_size;
     key_i->value = wcalloc((key_i->value_size + 1) * sizeof(char));
     memcpy(key_i->value, req->columns, key_i->column_size);
     key_i->value[key_i->value_size] = '\0';
 
     key_i->table_column_size = key_i->table_size + 1 + key_i->column_size;
     key_i->table_column = wcalloc(sizeof(key_i->table_column_size + 1) * sizeof(char));
-    memcpy(key_i->table_column, t->name, key_i->table_size);
+    memcpy(key_i->table_column, req->table_name, key_i->table_size);
     offset = key_i->table_size;
     key_i->table_column[offset] = '.';
     offset++;
@@ -313,7 +318,7 @@ key_info* create_key_info_by_pg_command(pg_parse_data* req) {
     offset = 0;
     key_i->full_size = key_i->table_size + 1 + key_i->column_size + 1 + key_i->value_size;
     key_i->full_key = wcalloc((key_i->full_size+ 1) * sizeof(char));
-    memcpy(key_i->full_key, t->name, key_i->table_size);
+    memcpy(key_i->full_key, req->table_name, key_i->table_size);
     offset += key_i->table_size;
     key_i->full_key[offset] = '.';
     offset++;

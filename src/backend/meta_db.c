@@ -59,6 +59,7 @@ char* create_conn_req(void) {
 
 // Retrieve all tables and their columns along with their data types.
 void init_meta_data(void) {
+    cache_log(CACHE_DEBUG, "init_meta_data");
     PGresult* res;
     PGconn* conn;
     char* conn_info;
@@ -67,7 +68,7 @@ void init_meta_data(void) {
     conn = PQconnectdb(conn_info);
     free(conn_info);
 
-    meta = wcalloc(sizeof(db_meta_data));
+    meta = shalloc(sizeof(db_meta_data));
 
     query = "SELECT tablename FROM pg_tables WHERE schemaname = 'public';";
 
@@ -87,7 +88,7 @@ void init_meta_data(void) {
     for (int i = 0; i < meta->count_tables; ++i) {
         char* table_name = PQgetvalue(res, i, 0);
         int name_size = PQgetlength(res, i, 0);
-        meta->tables[i].name = wcalloc( (name_size + 1) * sizeof(char));
+        meta->tables[i].name = shalloc( (name_size + 1) * sizeof(char));
         memcpy(meta->tables[i].name, table_name, name_size);
         meta->tables[i].name[name_size] = '\0';
     }
@@ -206,12 +207,9 @@ column* get_column_info(char* table_name, char* column_name) {
     return NULL;
 }
 
-bool table_filter(size_t oid) {
-    return get_table_info(oid);
-}
-
 table* get_table_info(char* table_name) {
-     for (int i = 0; i < meta->count_tables; ++i) {
+    cache_log(CACHE_DEBUG, "get_table_info");
+    for (int i = 0; i < meta->count_tables; ++i) {
         table* t  = &(meta->tables[i]);
         if (strcmp(table_name, t->name) == 0) {
             return t;
@@ -220,16 +218,6 @@ table* get_table_info(char* table_name) {
     return NULL;
 }
 
-column* get_key_column(size_t table_oid) {
-    table* t = get_table_info(table_oid);
-     for (int j = 0; j < t->count_column; ++j) {
-        column* c = &(t->columns[j]);
-        if (c->is_key) {
-            return c;
-        }
-    }
-    return NULL;
-}
 
 int get_column_index(char* column_name, char* table_name) {
     table* t = get_table_info(table_name);
@@ -239,5 +227,5 @@ int get_column_index(char* column_name, char* table_name) {
             return j;
         }
     }
-    return NULL;
+    return -1;
 }

@@ -115,9 +115,10 @@ static void find_key_column(pg_parse_data* parse, char** command) {
     find_column_value_pare(parse, command, -1, KEY);
 }
 
-pg_parse_data* parse_update(char* command) {
+pg_parse_data* parse_update(const char* command) {
     pg_parse_data* parse = wcalloc(sizeof(pg_parse_data));
-    char* cur_char = command + UPDATE_SKIP_SIZE;
+    char* cur_char = (char*)command;
+    cur_char += UPDATE_SKIP_SIZE;
     find_table_name(parse, &cur_char);
 
     cur_char += SET_SKIP_SIZE;

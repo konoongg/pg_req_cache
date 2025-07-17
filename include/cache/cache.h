@@ -11,10 +11,12 @@
 #include "ht.h"
 #include "storage_data.h"
 
+#define INV_DATA_NOT_FOUND -1
+
 typedef struct cache cache;
 
 data_version* get_cache(key_info* key_i);
-bool prepare_inv_cache(key_info* key_i, cache_response* v, int value_size, size_t xid);
+size_t invalidate_cache(key_info* key_i, cache_response* v, int value_size, size_t xid);
 int delete_cache(key_info* key_i);
 size_t get_cur_cache_size(void);
 void cache_clean(int del_time_s);

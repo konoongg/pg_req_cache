@@ -41,12 +41,12 @@ static void inv_unlock(invalidate* inv) {
 
 void init_trans_pool(void) {
     cache_inv = shalloc(sizeof(cache_invalidate));
-    cache_inv->xid_inv = shcalloc(INVALIDATE_XID_POOL_SIZE * sizeof(invalidate));
+    cache_inv->trans_pool = shalloc(INVALIDATE_XID_POOL_SIZE * sizeof(invalidate));
 
     for (int i = 0; i < INVALIDATE_XID_POOL_SIZE; ++i) {
         int err;
-        (cache_inv->xid_inv[i]).lock = shcalloc(sizeof(pthread_rwlock_t));
-        err = pthread_rwlock_init((cache_inv->xid_inv[i]).lock, NULL);
+        (cache_inv->trans_pool[i]).lock = shalloc(sizeof(pthread_rwlock_t));
+        err = pthread_rwlock_init((cache_inv->trans_pool[i]).lock, NULL);
         if (err != 0) {
             cache_log(CACHE_ERROR, "init_inv_pool: pthread_rwlock_init %s", strerror(err));
         }
@@ -55,19 +55,19 @@ void init_trans_pool(void) {
 
 void finish_trans_pool(void) {
     for (int i = 0; i < INVALIDATE_XID_POOL_SIZE; ++i) {
-        int err = pthread_rwlock_destroy((cache_inv->xid_inv[i]).lock);
+        int err = pthread_rwlock_destroy((cache_inv->trans_pool[i]).lock);
         if (err != 0) {
             cache_log(CACHE_ERROR, "finish_inv_pool: pthread_rwlock_destroy %s", strerror(err));
         }
-        shfree((cache_inv->xid_inv[i]).lock);
+        shfree((cache_inv->trans_pool[i]).lock);
     }
 
-    shfree(cache_inv->xid_inv);
+    shfree(cache_inv->trans_pool);
     shfree(cache_inv);
 }
 
-static trans_invalidate* find_trans_by_xid(invalidate* xid_inv, size_t xid) {
-    trans_invalidate* cur = xid_inv->first;
+static trans_invalidate* find_trans_by_xid(invalidate* inv, size_t xid) {
+    trans_invalidate* cur = inv->first;
     while (cur != NULL) {
         if (cur->xid == xid) {
             return cur;
@@ -88,13 +88,13 @@ static void delete_trans(trans_invalidate* cur) {
     if (prev) {
         cur->prev->next = next;
     } else {
-        (cache_inv->xid_inv[index]).first = next;
+        (cache_inv->trans_pool[index]).first = next;
     }
 
     if (next) {
         cur->next->prev = prev;
     } else {
-        (cache_inv->xid_inv[index]).last = prev;
+        (cache_inv->trans_pool[index]).last = prev;
     }
 
     free(cur);
@@ -104,87 +104,111 @@ static void delete_trans(trans_invalidate* cur) {
 trans_status check_trans_status(size_t xid) {
     trans_invalidate* trans;
     int index = xid % INVALIDATE_XID_POOL_SIZE;
-    invalidate* xid_inv = &(cache_inv->xid_inv[index]);
+    invalidate* inv = &(cache_inv->trans_pool[index]);
     trans_status  status;
-    inv_lock(xid_inv, read_lock);
+    inv_lock(inv, read_lock);
 
-    trans = find_xid(xid_inv, xid);
+    trans = find_trans_by_xid(inv, xid);
+    status = trans ? atomic_load(&(trans->status)) : COMMIT;
 
-    assert(trans);
+    if (status == ABORT) {
+        atomic_fetch_sub(&(trans->counter), 1);
+    }
 
-    inv_unlock(xid_inv);
-    return atomic_load(&(trans->status));
+    inv_unlock(inv);
+    return status;
 }
 
 void add_trans_event(key_info* key_i, created_cache_respons* res, size_t xid) {
-    size_t expeted_prepare = 0;
     int index =  xid % INVALIDATE_XID_POOL_SIZE;
-    invalidate* inv = = &(cache_inv->trans_pool[index]);
+    invalidate* inv = &(cache_inv->trans_pool[index]);
     trans_invalidate* cur_trans;
-    bool this_key_exist;
+    size_t old_xid = 0;
 
     inv_lock(inv, read_lock);
-
-    this_key_exist = prepare_invalid_cache(key_i, res->res, res->size, xid);
-
-    if (!this_key_exist) {
-        inv_unlock(inv);
-        return;
-    }
 
     cur_trans = find_trans_by_xid(inv, xid) ;
     if (!cur_trans) {
         inv_unlock(inv);
         inv_lock(inv, write_lock);
 
-        if (xid_inv->first == NULL) {
-            xid_inv->first = xid_inv->last = shcalloc(sizeof(trans_invalidate));
-            xid_inv->first->prev = NULL;
+        if (inv->first == NULL) {
+            inv->first = inv->last = shalloc(sizeof(trans_invalidate));
+            inv->first->prev = NULL;
         } else {
-            xid_inv->last->next = shalloc(sizeof(trans_invalidate));
-            xid_inv->last->next->prev = xid_inv->last;
-            xid_inv->last = xid_inv->last->next;
+            inv->last->next = shalloc(sizeof(trans_invalidate));
+            inv->last->next->prev = inv->last;
+            inv->last = inv->last->next;
         }
 
-        xid_inv->last->counter = 0;
-        xid_inv->last->status = IN_PROGRES;
-        xid_inv->last->xid = xid;
+        inv->last->counter = 0;
+        inv->last->status = IN_PROGRES;
+        inv->last->xid = xid;
 
-        cur_trans = xid_inv->last;
+        cur_trans = inv->last;
+
+
+        /* it is hard to grab a lock, but it is necessary here,
+        * otherwise it is possible that we make a request to the cache having a unique lock,
+        * someone makes a set request,
+        * takes a unique lock on the cache entry and tries to access the transaction pool.
+        * We get a deadlock
+        */
+
+        inv_unlock(inv);
+        inv_lock(inv, read_lock);
     }
 
+    //the order of operations is this way because we want
+    //that if the structure of the cache data contains information about a transaction,
+    //then the structures describing these transactions already exist
+    old_xid = invalidate_cache(key_i, res->res, res->size, xid);
+    if (old_xid != -1) {
+        atomic_fetch_add(&(cur_trans->counter), 1);
+    }
 
-    atomic_fetch_add(&(cur_trans->counter), 1);
+    if (old_xid > 0) {
+        if (old_xid % INVALIDATE_XID_POOL_SIZE == index) {
+            trans_invalidate*  trans = find_trans_by_xid(inv, old_xid);
+            trans_status status = trans ? atomic_load(&(trans->status)) : COMMIT;
+
+            if (status == ABORT) {
+                atomic_fetch_sub(&(trans->counter), 1);
+            }
+        } else {
+            check_trans_status(old_xid);  // if status == abort, need sub transaction use counter
+        }
+    }
     inv_unlock(inv);
 }
 
 void process_apply(size_t xid) {
     int index = xid % INVALIDATE_XID_POOL_SIZE;
-    invalidate* xid_inv = &(cache_inv->xid_inv[index]);
+    invalidate* inv = &(cache_inv->trans_pool[index]);
     trans_invalidate* cur;
 
-    inv_lock(xid_inv, write_lock);
+    inv_lock(inv, write_lock);
 
-    cur = find_trans_by_xid(xid_inv, xid);
+    cur = find_trans_by_xid(inv, xid);
 
     if (cur) {
         delete_trans(cur);
     }
 
-    inv_unlock(xid_inv);
+    inv_unlock(inv);
 }
 
-void process_reset(size_t xid) {
-    int index = xid % INVALIDATE_XID_POOL_SIZE;
-    invalidate* inv = &(cache_inv->xid_inv[index]);
-    trans_invalidate* cur_trans;
+// void process_reset(size_t xid) {
+//     int index = xid % INVALIDATE_XID_POOL_SIZE;
+//     invalidate* inv = &(cache_inv->xid_inv[index]);
+//     trans_invalidate* cur_trans;
 
-    inv_lock(inv, read_lock);
-    cur_trans = find_trans_by_xid(inv, xid);
-    assert(cur_trans);
+//     inv_lock(inv, read_lock);
+//     cur_trans = find_trans_by_xid(inv, xid);
+//     assert(cur_trans);
 
 
-    atomic_store(&cur_trans->status, ABORT);
+//     atomic_store(&cur_trans->status, ABORT);
 
-    inv_unlock(inv);;
-}
+//     inv_unlock(inv);;
+// }

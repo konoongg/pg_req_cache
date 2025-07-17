@@ -21,6 +21,7 @@ hash_table* create_ht(create_ht_info* info);
 int delete_data(hash_table* ht, find_ht_data* find);
 size_t get_cur_size(hash_table* ht);
 void destroy_ht(hash_table* ht);
+size_t set_invalid_data(hash_table* ht, create_ht_data* new_data, size_t xid);
 void drop_version(data_version* version);
 void ht_clean(hash_table* ht, int recomendate_ttl_s);
 void set_data_if_not_exist(hash_table* ht, create_ht_data* new_data);

@@ -5,6 +5,7 @@
 #include "executor/executor.h"
 
 #include "cache_serializer.h"
+#include "invalid_trans.h"
 #include "invalid.h"
 #include "logger.h"
 #include "parse_pg_command.h"
@@ -17,13 +18,13 @@ static TransactionId get_xid_from_querydesc(QueryDesc* queryDesc) {
 }
 
 void inv_process_command(QueryDesc* queryDesc) {
-    char* command = queryDesc->sourceText;
+    const char* command = queryDesc->sourceText;
 
     switch (queryDesc->operation) {
         case(CMD_UPDATE):
             pg_parse_data* req = parse_update(command);
             key_info* key_i = create_key_info_by_pg_command(req);
-            created_cache_respons* res = create_key_info_by_pg_command(req);
+            created_cache_respons* res = create_response_by_pg_command(req);
 
             add_trans_event(key_i, res, get_xid_from_querydesc(queryDesc));
 

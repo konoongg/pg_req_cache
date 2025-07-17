@@ -97,8 +97,8 @@ static void rewrite_block(char* start_mem, int size, bool is_free) {
 
 void init_shared_allocator(void* mem, int size) {
     free_list* f_list = (free_list*)mem;
+
     allocator = &(shmem_data->allocator);
-    int err;
 
     if (size < MIN_ALLOCATOR_SIZE ) {
         cache_log(CACHE_ERROR, "init_shared_allocator: get size: %d  min size %d", size, MIN_ALLOCATOR_SIZE);
@@ -171,7 +171,7 @@ static void* shared_allocator_alloc(int size) {
     char* free_block;
     int size_block;
     int alloced_size = size > sizeof(free_list) ? size : sizeof(free_list) ;
-    int err = pthread_mutex_lock(allocator->lock);
+    int err = pthread_mutex_lock(&(allocator->lock));
     if (err != 0) {
        cache_log(CACHE_ERROR,"shared_allocator_alloc: pthread_mutex_lock() failed: %s\n", strerror(err));
     }
@@ -180,7 +180,7 @@ static void* shared_allocator_alloc(int size) {
 
     if (!free_block) {
         cache_log(CACHE_DEBUG, "shared_allocator_alloc: can't find memmory block with size %d\n", size);
-        err = pthread_mutex_unlock(allocator->lock);
+        err = pthread_mutex_unlock(&(allocator->lock));
         if (err != 0) {
             cache_log(CACHE_ERROR,"shared_allocator_alloc: pthread_mutex_unlock() failed: %s\n", strerror(err));
         }
@@ -203,7 +203,7 @@ static void* shared_allocator_alloc(int size) {
 
     rewrite_block(free_block, alloced_size, ALLOCED_BLOCK);
 
-    err = pthread_mutex_unlock(allocator->lock);
+    err = pthread_mutex_unlock(&(allocator->lock));
     if (err != 0) {
        cache_log(CACHE_ERROR,"shared_allocator_alloc: pthread_mutex_unlock() failed: %s\n", strerror(err));
     }
@@ -240,7 +240,7 @@ static void shared_allocator_free(void* ptr) {
 
 
     assert((char*)ptr >= (char*)allocator->mem + sizeof(free_list) && (char*)ptr <= (char*)allocator->mem + allocator->mem_size - sizeof(free_node) - sizeof(end_mark)); // it is shared allocator mem
-    err = pthread_mutex_lock(allocator->lock);
+    err = pthread_mutex_lock(&(allocator->lock));
     if (err != 0) {
        cache_log(CACHE_ERROR,"shared_allocator_free: pthread_mutex_lock() failed: %s", strerror(err));
     }
@@ -278,7 +278,7 @@ static void shared_allocator_free(void* ptr) {
 
     rewrite_block(free_block, block_size, FREE_BLOCK);
 
-    err = pthread_mutex_unlock(allocator->lock);
+    err = pthread_mutex_unlock(&(allocator->lock));
     if (err != 0) {
        cache_log(CACHE_ERROR, "shared_allocator_free: pthread_mutex_unlock() failed: %s\n", strerror(err));
     }

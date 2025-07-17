@@ -8,6 +8,7 @@
 #include "alloc.h"
 #include "config.h"
 #include "ht.h"
+#include "invalid_trans.h"
 #include "logger.h"
 
 #define write_lock false
@@ -51,6 +52,45 @@ static uint64_t get_current_ms() {
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return (uint64_t)(tv.tv_sec) * 1000 + (uint64_t)(tv.tv_usec) / 1000;
+}
+
+//get can only change form UNKNOWN to VALID/INVALID
+static bool check_data_valid(ht_data* data) {
+    invalid_status inv_status;
+
+    if (data->xid_inv == 0) {
+        return true;
+    }
+
+    inv_status = atomic_load(&(data->inv_status));
+    if (inv_status == INVALID) {
+        return false;
+    } else if (inv_status == VALID) {
+        return true;
+    } else if (inv_status == UNKNOWN) {
+        invalid_status new_status = check_trans_status(data->xid_inv);
+        atomic_store(&(data->inv_status), new_status);
+        if (new_status == INVALID) {
+            return false;
+        } else {
+            return true;
+        }
+    }
+    cache_log(CACHE_ERROR, "data invalidation status unlnown");
+
+    return false;
+}
+
+static bool check_data_process_inv(ht_data* data) {
+
+    if (data->xid_inv == 0 || data->inv_status != UNKNOWN) {
+        return false;
+    }
+
+    if (check_trans_status(data->xid_inv) == IN_PROGRES) {
+        return true;
+    }
+    return false;
 }
 
 /*
@@ -141,21 +181,36 @@ static void free_data_from_ht(hash_table* ht, ht_basket* basket, ht_data* cur_da
         version = next_version;
     }
 
-
-
-    /*
-    * We avoid deleting data here if any invalidation info exists,
-    * because we don't want to handle pointer reassignment for
-    * invalidated structures ourselves.
-    *
-    * Special case for DEL commands arriving via cache:
-    * - May occur when the transaction has already completed
-    * - But we haven't yet processed the WAL notification
-    */
-
-    if (all_del) {
+    if (all_del && !check_data_process_inv(cur_data)) {
         free_data(ht, basket, cur_data, prev_data);
     }
+}
+
+static size_t process_inv(hash_table* ht, ht_data* data) {
+    size_t xid = data->xid_inv;
+
+    if (xid == 0) {
+        return xid;
+    }
+
+    switch (data->inv_status) {
+        case VALID:
+            ht->value_free(data->inv_value->value);
+            shfree(data->value_cur);
+            break;
+        case INVALID:
+            data->value_cur->next = data->inv_value;
+            data->value_cur = data->value_cur->next;
+            break;
+        case UNKNOWN:
+            data->inv_status = check_trans_status(xid);
+            assert(data->inv_status != UNKNOWN);
+            process_inv(ht, data);
+            break;
+    }
+
+    data->xid_inv = 0;
+    return xid;
 }
 
 hash_table* create_ht(create_ht_info* info) {
@@ -231,7 +286,11 @@ data_version* get_data(hash_table* ht, find_ht_data* find) {
     basket_lock(basket, read_lock);
     data = find_data_in_basket(ht, basket, find->find_key, WITH_TLL);
     if (data != NULL) {
-        result = data->value_cur;
+        if (check_data_valid(data)) {
+            result = data->value_cur;
+        } else {
+            result = data->inv_value;
+        }
         atomic_fetch_add(&(data->value_cur->usage_counter), 1);
     }
 
@@ -277,28 +336,38 @@ data_version* get_data(hash_table* ht, find_ht_data* find) {
 //     return old_xid;
 // }
 
-//If we find a record, we mark it as invalid so that the garbage collector cannot delete it
-data_version* prepare_invalidate(hash_table* ht, find_ht_data* find, size_t xid) {
+
+size_t set_invalid_data(hash_table* ht, create_ht_data* new_data, size_t xid) {
     ht_basket* basket;
     ht_data* data;
     int data_size;
+    size_t old_xid;
 
-    basket = get_basket(ht, find->hash_key, find->hash_key_size);
+    basket = get_basket(ht, new_data->hash_key, new_data->hash_key_size);
 
     basket_lock(basket, write_lock);
 
-    data = find_data_in_basket(ht, basket, find->find_key, WITHOUT_TLL);
-    if (data == NULL) {
-        basket_unlock(basket);
-        return NULL;
+    data = find_data_in_basket(ht, basket, new_data->find_key, WITHOUT_TLL);
+    assert(data);
+
+    old_xid = process_inv(ht, data);
+
+    data->inv_value->value = new_data->value;
+    data->inv_value->next = NULL;
+    data->inv_value->usage_counter = 0;
+    data->expire_ms = new_data->expire_ms;
+    data_size = new_data->find_key_size + new_data->value_size + sizeof(ht_data);
+    data->inv_status = UNKNOWN;
+
+    atomic_fetch_add(&(ht->cur_ht_size), data_size);
+
+    data->last_time = time(NULL);
+    if (data->last_time == -1) {
+        cache_log(CACHE_ERROR, "set_data: time error  %s", strerror(errno));
     }
 
-    data->xid_inv = xid;
-    data->inv_status = UNKNOWN;
-    atomic_fetch_add(&(data->value_cur->usage_counter), 1);
-
     basket_unlock(basket);
-    return data->value_cur;
+    return old_xid;
 }
 
 
@@ -324,6 +393,11 @@ void set_data(hash_table* ht, create_ht_data* new_data) {
         data->value_first = data->value_cur = shalloc(sizeof(data_version));
         data->value_cur->dirty = false;
     } else {
+        size_t old_xid = process_inv(ht, data);
+        if (old_xid > 0) {
+            check_trans_status(old_xid); // if status == abort, need sub transaction use counter
+        }
+
         if (data->value_cur->usage_counter == 0) {
             atomic_fetch_sub(&(ht->cur_ht_size), data->ht_data_size);
             ht->value_free(data->value_cur->value);
@@ -339,6 +413,8 @@ void set_data(hash_table* ht, create_ht_data* new_data) {
     data->value_cur->usage_counter = 0;
     data->expire_ms = new_data->expire_ms;
     data_size = new_data->find_key_size + new_data->value_size + sizeof(ht_data);
+    data->inv_status = VALID;
+    data->xid_inv = 0;
 
     atomic_fetch_add(&(ht->cur_ht_size), data_size);
 
@@ -374,6 +450,8 @@ void set_data_if_not_exist(hash_table* ht, create_ht_data* new_data) {
         data->value_cur->value = new_data->value;
         data->value_cur->next = NULL;
         data->value_cur->usage_counter = 0;
+        data->xid_inv = 0;
+        data->inv_status = VALID;
 
         atomic_fetch_add(&(ht->cur_ht_size), new_data->find_key_size + new_data->value_size + sizeof(ht_data));
         data->last_time = time(NULL);

@@ -11,7 +11,11 @@ typedef struct cache_invalidate cache_invalidate;
 typedef struct invalidate invalidate;
 typedef struct trans_invalidate trans_invalidate;
 
+trans_status check_trans_status(size_t xid);
 void add_trans_event(key_info* key_i, created_cache_respons* res, size_t xid);
+void finish_trans_pool(void);
+void init_trans_pool(void);
+void process_apply(size_t xid);
 
 #define INVALIDATE_XID_POOL_SIZE 101
 

@@ -18,7 +18,7 @@ struct cache_attr {
 
 struct cache_response {
     cache_attr** values;
-    column** columns; // сохраняем просто сылку, на структуру, которую проинициализоали
+    column** columns; // сохраняем просто ссылку, на структуру, которую проинициализоали
     int count_fields;
     int count_tuples;
 

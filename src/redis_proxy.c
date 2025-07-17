@@ -17,6 +17,7 @@
 #include "command_processor.h"
 #include "config.h"
 #include "invalid_trans.h"
+#include "invalid.h"
 #include "logger.h"
 #include "query_cache_controller.h"
 #include "resp_creater.h"

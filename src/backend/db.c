@@ -13,6 +13,7 @@
 #include "db.h"
 #include "logger.h"
 #include "meta_db.h"
+#include "parse_pg_command.h"
 #include "storage_data.h"
 
 extern config_cache config;

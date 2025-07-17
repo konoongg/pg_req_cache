@@ -35,9 +35,10 @@ void init_cache(void) {
     create_ht_info ht_table_info;
     create_ht_info ht_value_info;
 
-    atomic_store(&c->table_max_num, 0);
-
     c = shmem_data->c = shalloc(sizeof(cache));
+
+
+    atomic_store(&c->table_max_num, 0);
 
     ht_table_info.cmp_key = cmp_table_key;
     ht_table_info.copy = copy_table;
@@ -58,6 +59,7 @@ void init_cache(void) {
     ht_value_info.ttl_s = config.c_conf.ttl_s;
     ht_value_info.value_free = value_free_response;
     c->values = create_ht(&ht_value_info);
+
 }
 
 static data_version* get_table_column(key_info* key_i) {
@@ -165,21 +167,121 @@ void set_cache(key_info* key_i, cache_response* v, int value_size, int ttl_ms) {
     drop_version(t_values_cur_v);
 }
 
-size_t invalidate_cache(key_info* key_i, cache_response* v, int value_size, size_t xid) {
-    ht_data* result;
-    data_version* table_values_cur_v;
-    table_data* table_values;
-    find_ht_data find_value;
-    find_value_key fv_key;
-
-    table_values_cur_v = get_table_column(key_i);
-    if (table_values_cur_v == NULL) {
-        return NULL;
+static db_data* copy_data(db_data* data, db_type type, int* value_size) {
+    db_data* new_data = wcalloc(sizeof(db_data));
+    *value_size += sizeof(db_data);
+    switch (type) {
+        case INT:
+            new_data->num = data->num;
+            break;
+        case STRING:
+            new_data->str.size = data->str.size;
+            new_data->str.str = wcalloc(new_data->str.size * sizeof(char));
+            *value_size += new_data->str.size * sizeof(char);
+            memcpy(new_data->str.str, data->str.str, new_data->str.size);
+            break;
     }
 
-    
-    drop_version(table_values_cur_v);
-    return result;
+    return new_data;
+}
+
+/*
+ * General invalidation logic:
+ *
+ * Two types of requests may arrive: data update and data deletion
+ *
+ * For update requests: we take the previous version and use it to populate
+ * missing fields in the new version, then add a new invalidated version.
+ * Since version retrieval increments its usage counter, we guarantee the garbage
+ * collector won't remove it. Set/Del commands modifying data through cache or
+ * other backends cannot interfere because concurrent transactions on the same
+ * key will be serialized - one will wait for the other to complete.
+ *
+ * For delete requests: we set a special flag marking the record for deletion.
+ *
+ * In all cases, we set the new transaction's xid. This is needed to determine
+ * data validity during subsequent accesses.
+ *
+ * Possible operations:
+ *
+ * 1) Data retrieval:
+ *    - First check status:
+ *      * If valid: use latest version
+ *      * If invalid: use invalidated version
+ *      * If unknown: search for the transaction
+ *        - If not found: transaction completed successfully
+ *        - If found: check status
+ *          * If in progress: return current version
+ *          * If aborted: decrement usage counter
+ *            - When counter reaches 0, garbage collector will reclaim it
+ *          * If completed: set xid and status to indicate whether to use
+ *            invalidated data or latest version
+ *    - Special handling required for data marked for deletion during invalidation
+ *
+ * 2) Data insertion:
+ *    - Two possible paths:
+ *      * Direct via Set command
+ *      * Through invalidation when adding new values
+ *    - Must check if previous invalidation flags are set (deletion is lazy)
+ *    - By this point, previous invalidation must have completed - either
+ *      applied or aborted. Check as in point #1.
+ *      * If applied: move invalidated version to regular version list
+ *      * If aborted: simply clear it
+ *    - Key differences between cases:
+ *      * Set command: can decrement counter if previous transaction aborted
+ *        (uses rwlock - write lock only taken for new transaction addition
+ *        and garbage collection - deadlocks avoided as only one exclusive
+ *        lock exists at any time)
+ *      * Invalidation: cannot do this because hash table transaction buckets
+ *        are locked, potentially causing bucket collision
+ *        - Corresponding functions return previous transaction's xid if exists,
+ *          or -1 if record not found
+ *
+ * 3) Data deletion:
+ *    - Three possible methods:
+ *      * Garbage collector:
+ *        - Doesn't clean records marked with unknown invalidation status
+ *        - Only cleans versions within them, not the data structure itself
+ *      * Direct user request:
+ *        - No need to check previous transaction status
+ *        - If we can access the key, no transaction holds it, meaning all
+ *          previous transactions completed (successfully or not)
+ *        - Data can be deleted regardless
+ *      * Invalidation during get request:
+ *        - Must check if data was marked for deletion by invalidation
+ *        - If transaction succeeded: delete data (like expired TTL handling)
+ *        - If transaction failed: clear the deletion flag
+ */
+size_t invalidate_cache(key_info* key_i, cache_response* v, int value_size, size_t xid) {
+    data_version* current_version = get_cache(key_i);
+    data_version* t_values_cur_v = get_or_create_table(key_i);
+    table_data* t_values = t_values_cur_v->value;
+    create_ht_data new_value_data;
+    size_t prev_inv_xid;
+    cache_response* prev_v = current_version->value;
+
+    if (!current_version) {
+        return -1;
+    }
+
+    for (int i = 0; i < v->count_fields; ++i) {
+        if (v->columns[i] == NULL) {
+            v->columns[i] = prev_v->columns[i];
+            v->columns[i] = shalloc(v->count_fields * sizeof(cache_attr));
+            v->values[i]->data = copy_data(prev_v->values[i]->data, v->columns[i]->type, &value_size);
+        }
+    }
+
+    new_value_data = prepare_value(key_i, v, value_size, t_values->uniq_num, 0);
+    prev_inv_xid = set_invalid_data(c->values, &new_value_data, xid);
+    if (prev_inv_xid == INV_DATA_NOT_FOUND) {
+        value_free_response(v);
+    }
+
+    drop_version(t_values_cur_v);
+    drop_version(current_version);
+
+    return prev_inv_xid;
 }
 
 int delete_cache(key_info* key_i) {

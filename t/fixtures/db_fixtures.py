@@ -13,7 +13,7 @@ import pytest
 
 @pytest.fixture(scope="function")
 def create_and_drop_db():
-    max_retries = 3
+    max_retries = 10
     retry_delay = 1
     conn = None
     cursor = None
