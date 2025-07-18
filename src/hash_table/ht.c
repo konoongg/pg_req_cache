@@ -58,6 +58,7 @@ static uint64_t get_current_ms() {
 static bool check_data_valid(ht_data* data) {
     invalid_status inv_status;
 
+    cache_log(CACHE_DEBUG, "check_data_valid daat %p data->xid_inv  %d status %d",data, data->xid_inv, atomic_load(&(data->inv_status)));
     if (data->xid_inv == 0) {
         return true;
     }
@@ -186,11 +187,15 @@ static void free_data_from_ht(hash_table* ht, ht_basket* basket, ht_data* cur_da
     }
 }
 
-static size_t process_inv(hash_table* ht, ht_data* data) {
+static size_t process_inv(hash_table* ht, ht_data* data, size_t new_xid) {
     size_t xid = data->xid_inv;
-
+    cache_log(CACHE_DEBUG, "process_inv pld_xid %d new_xid %d", xid, new_xid);
     if (xid == 0) {
         return xid;
+    } else if (xid == new_xid) {
+        ht->value_free(data->inv_value->value);
+        shfree(data->value_cur);
+        return 0;
     }
 
     switch (data->inv_status) {
@@ -203,9 +208,11 @@ static size_t process_inv(hash_table* ht, ht_data* data) {
             data->value_cur = data->value_cur->next;
             break;
         case UNKNOWN:
-            data->inv_status = check_trans_status(xid);
-            assert(data->inv_status != UNKNOWN);
-            process_inv(ht, data);
+            trans_status t_status = check_trans_status(xid) ;
+            assert(t_status != IN_PROGRES);
+
+            data->inv_status = t_status == COMMIT ? INVALID : VALID;
+            process_inv(ht, data, new_xid);
             break;
     }
 
@@ -278,6 +285,7 @@ void drop_version(data_version* version) {
 }
 
 data_version* get_data(hash_table* ht, find_ht_data* find) {
+    cache_log(CACHE_DEBUG, "get_data start");
     ht_basket* basket;
     ht_data* data;
     void* result = NULL;
@@ -286,12 +294,16 @@ data_version* get_data(hash_table* ht, find_ht_data* find) {
     basket_lock(basket, read_lock);
     data = find_data_in_basket(ht, basket, find->find_key, WITH_TLL);
     if (data != NULL) {
+        cache_log(CACHE_DEBUG, "find data %p", data);
         if (check_data_valid(data)) {
+            cache_log(CACHE_DEBUG, "data valdi");
             result = data->value_cur;
+            atomic_fetch_add(&(data->value_cur->usage_counter), 1);
         } else {
+            cache_log(CACHE_DEBUG, "data invalid");
             result = data->inv_value;
+            atomic_fetch_add(&(data->inv_value->usage_counter), 1);
         }
-        atomic_fetch_add(&(data->value_cur->usage_counter), 1);
     }
 
     basket_unlock(basket);
@@ -338,6 +350,9 @@ data_version* get_data(hash_table* ht, find_ht_data* find) {
 
 
 size_t set_invalid_data(hash_table* ht, create_ht_data* new_data, size_t xid) {
+
+    cache_log(CACHE_DEBUG, "set_invalid_data start xid %d", xid);
+
     ht_basket* basket;
     ht_data* data;
     int data_size;
@@ -350,7 +365,13 @@ size_t set_invalid_data(hash_table* ht, create_ht_data* new_data, size_t xid) {
     data = find_data_in_basket(ht, basket, new_data->find_key, WITHOUT_TLL);
     assert(data);
 
-    old_xid = process_inv(ht, data);
+    old_xid = process_inv(ht, data, xid);
+
+    if (!data->inv_value) {
+        data->inv_value = shalloc(sizeof(data_version));
+    }
+
+  
 
     data->inv_value->value = new_data->value;
     data->inv_value->next = NULL;
@@ -358,6 +379,14 @@ size_t set_invalid_data(hash_table* ht, create_ht_data* new_data, size_t xid) {
     data->expire_ms = new_data->expire_ms;
     data_size = new_data->find_key_size + new_data->value_size + sizeof(ht_data);
     data->inv_status = UNKNOWN;
+    data->xid_inv = xid;
+
+    cache_response* test = data->inv_value->value;
+
+    for (int i = 0; i < test->count_fields; ++i) {
+        cache_attr* attr = &(test->values[0][i]);
+        cache_log(CACHE_DEBUG, "attr %s %d", attr->data->str.str, attr->data->str.size);
+    }
 
     atomic_fetch_add(&(ht->cur_ht_size), data_size);
 
@@ -366,12 +395,14 @@ size_t set_invalid_data(hash_table* ht, create_ht_data* new_data, size_t xid) {
         cache_log(CACHE_ERROR, "set_data: time error  %s", strerror(errno));
     }
 
+    cache_log(CACHE_DEBUG, "INVALIDATE data %p xid %d", data, data->xid_inv);
     basket_unlock(basket);
     return old_xid;
 }
 
 
 void set_data(hash_table* ht, create_ht_data* new_data) {
+    cache_log(CACHE_DEBUG, "set_data set");
     ht_basket* basket;
     ht_data* data;
     int data_size;
@@ -393,7 +424,7 @@ void set_data(hash_table* ht, create_ht_data* new_data) {
         data->value_first = data->value_cur = shalloc(sizeof(data_version));
         data->value_cur->dirty = false;
     } else {
-        size_t old_xid = process_inv(ht, data);
+        size_t old_xid = process_inv(ht, data, 0);
         if (old_xid > 0) {
             check_trans_status(old_xid); // if status == abort, need sub transaction use counter
         }
@@ -408,6 +439,8 @@ void set_data(hash_table* ht, create_ht_data* new_data) {
         }
     }
 
+
+    cache_log(CACHE_DEBUG, "set_data value %p ", new_data->value);
     data->value_cur->value = new_data->value;
     data->value_cur->next = NULL;
     data->value_cur->usage_counter = 0;

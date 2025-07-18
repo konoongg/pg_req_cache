@@ -197,6 +197,9 @@ created_cache_respons* create_response_by_pg_command(pg_parse_data* req) {
 
         res->columns[c_index] = c;
 
+        res->values[0][c_index].data = shalloc(sizeof(db_data));
+        cache_log(CACHE_DEBUG, "cr commsnd: res->values[0][%d].data %p res %p", c_index, res->values[0][c_index].data, res);
+        ccr->size += sizeof(db_data);
         switch (c->type) {
             case INT:
                 res->values[0][c_index].data->num = (int)strtol(req->value[i], NULL, 10);
@@ -303,7 +306,7 @@ key_info* create_key_info_by_pg_command(pg_parse_data* req) {
 
     key_i->value_size = req->key_value_size;
     key_i->value = wcalloc((key_i->value_size + 1) * sizeof(char));
-    memcpy(key_i->value, req->columns, key_i->column_size);
+    memcpy(key_i->value, req->key_value, key_i->column_size);
     key_i->value[key_i->value_size] = '\0';
 
     key_i->table_column_size = key_i->table_size + 1 + key_i->column_size;

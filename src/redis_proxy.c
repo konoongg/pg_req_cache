@@ -36,7 +36,7 @@ void clean_up(void);
 config_cache config;
 statistics stats;
 
-shared_struct* shmem_data;
+shared_struct* shmem_data = NULL;
 
 static shmem_request_hook_type prev_shmem_request_hook = NULL;
 static shmem_startup_hook_type prev_shmem_startup_hook = NULL;
@@ -133,6 +133,9 @@ void proxy_start_work(Datum main_arg) {
 
     init_cache();
     cache_log(CACHE_INFO, "finish init cache");
+
+    init_trans_pool();
+    cache_log(CACHE_INFO, "finish invalidator");
 
     init_cache_gc();
     cache_log(CACHE_INFO, "finish init cache gc");

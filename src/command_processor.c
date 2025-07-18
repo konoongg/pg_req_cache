@@ -115,6 +115,7 @@ static process_result do_get(client_req* cl_req, answer* answ, connection* conn)
             atomic_store(&(res->prepare_answer_valid), true);
             atomic_store(&(res->updated), false);
         }
+        cache_log(CACHE_DEBUG, "created answer %s", answ->answer);
     }
 
     drop_version(version);
@@ -169,6 +170,7 @@ static process_result do_set(client_req* cl_req, answer* answ, connection* conn)
                 ++i;
             }
         }
+        cache_log(CACHE_DEBUG, "cache set from command_processor");
         set_cache(key_i, res->res, res->size, ttl_ms);
         free(res);
         answ->answer_size = def_resp.ok.answer_size;

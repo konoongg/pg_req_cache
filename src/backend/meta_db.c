@@ -6,8 +6,10 @@
 #include "config.h"
 #include "logger.h"
 #include "meta_db.h"
+#include "shmem.h"
 
 extern config_cache config;
+extern shared_struct* shmem_data;
 db_meta_data* meta;
 
 
@@ -59,7 +61,6 @@ char* create_conn_req(void) {
 
 // Retrieve all tables and their columns along with their data types.
 void init_meta_data(void) {
-    cache_log(CACHE_DEBUG, "init_meta_data");
     PGresult* res;
     PGconn* conn;
     char* conn_info;
@@ -68,7 +69,9 @@ void init_meta_data(void) {
     conn = PQconnectdb(conn_info);
     free(conn_info);
 
-    meta = shalloc(sizeof(db_meta_data));
+    cache_log(CACHE_DEBUG, "init_meta_data");
+
+    shmem_data->meta = meta = shalloc(sizeof(db_meta_data));
 
     query = "SELECT tablename FROM pg_tables WHERE schemaname = 'public';";
 
@@ -84,7 +87,7 @@ void init_meta_data(void) {
     cache_log(CACHE_DEBUG, "cache find %d tables", meta->count_tables);
 
 
-    meta->tables = wcalloc(meta->count_tables * sizeof(table));
+    meta->tables = shalloc(meta->count_tables * sizeof(table));
     for (int i = 0; i < meta->count_tables; ++i) {
         char* table_name = PQgetvalue(res, i, 0);
         int name_size = PQgetlength(res, i, 0);
@@ -208,9 +211,10 @@ column* get_column_info(char* table_name, char* column_name) {
 }
 
 table* get_table_info(char* table_name) {
-    cache_log(CACHE_DEBUG, "get_table_info");
+    cache_log(CACHE_DEBUG, "get_table_info meta %p %d", meta, meta->count_tables);
     for (int i = 0; i < meta->count_tables; ++i) {
         table* t  = &(meta->tables[i]);
+        cache_log(CACHE_DEBUG, "get_table_info table_name %s ", t->name);
         if (strcmp(table_name, t->name) == 0) {
             return t;
         }

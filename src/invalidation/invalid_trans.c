@@ -40,7 +40,7 @@ static void inv_unlock(invalidate* inv) {
 }
 
 void init_trans_pool(void) {
-    cache_inv = shalloc(sizeof(cache_invalidate));
+    shmem_data->cache_inv = cache_inv = shalloc(sizeof(cache_invalidate));
     cache_inv->trans_pool = shalloc(INVALIDATE_XID_POOL_SIZE * sizeof(invalidate));
 
     for (int i = 0; i < INVALIDATE_XID_POOL_SIZE; ++i) {
@@ -97,9 +97,8 @@ static void delete_trans(trans_invalidate* cur) {
         (cache_inv->trans_pool[index]).last = prev;
     }
 
-    free(cur);
+    shfree(cur);
 }
-
 
 trans_status check_trans_status(size_t xid) {
     trans_invalidate* trans;
@@ -183,9 +182,16 @@ void add_trans_event(key_info* key_i, created_cache_respons* res, size_t xid) {
 }
 
 void process_apply(size_t xid) {
-    int index = xid % INVALIDATE_XID_POOL_SIZE;
-    invalidate* inv = &(cache_inv->trans_pool[index]);
+    int index;
+    invalidate* inv;
     trans_invalidate* cur;
+
+    if (!cache_inv) {
+        return;
+    }
+
+    index = xid % INVALIDATE_XID_POOL_SIZE;
+    inv = &(cache_inv->trans_pool[index]);
 
     inv_lock(inv, write_lock);
 

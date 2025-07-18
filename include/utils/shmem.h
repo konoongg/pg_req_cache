@@ -3,11 +3,13 @@
 
 #include "cache.h"
 #include "invalid_trans.h"
+#include "meta_db.h"
 
 typedef struct shared_allocator shared_allocator;
 typedef struct shared_struct shared_struct;
 
 void init_shmem(void);
+void load_shared_struct(void);
 
 struct shared_allocator {
     void* mem;
@@ -17,9 +19,10 @@ struct shared_allocator {
 };
 
 struct shared_struct {
-    cache_invalidate* invalidator;
+    cache_invalidate* cache_inv;
     cache* c;
     shared_allocator allocator;
+    db_meta_data* meta;
 };
 
 
