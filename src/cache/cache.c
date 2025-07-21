@@ -100,8 +100,6 @@ static create_ht_data prepare_value(key_info*  key_i, cache_response* v, int val
 * If the data does not exist, it returns NULL.
 */
 data_version* get_cache(key_info* key_i) {
-
-    cache_log(CACHE_DEBUG, "get_cache start");
     data_version* result;
 
     find_ht_data find_value;
@@ -170,12 +168,10 @@ void set_cache(key_info* key_i, cache_response* v, int value_size, int ttl_ms) {
 }
 
 static db_data* copy_data(db_data* data, db_type type, int* value_size) {
-    cache_log(CACHE_DEBUG, "copy_data: start type %d", type);
     db_data* new_data = shalloc(sizeof(db_data));
     *value_size += sizeof(db_data);
     switch (type) {
         case INT:
-            cache_log(CACHE_DEBUG, "copy_data: INT");
             new_data->num = data->num;
             break;
         case STRING:
@@ -183,7 +179,6 @@ static db_data* copy_data(db_data* data, db_type type, int* value_size) {
             new_data->str.str = shalloc(new_data->str.size * sizeof(char));
             *value_size += new_data->str.size * sizeof(char);
             memcpy(new_data->str.str, data->str.str, new_data->str.size);
-            cache_log(CACHE_DEBUG, "copy_data: size %d str %s", new_data->str.size, new_data->str.str );
             break;
     }
 
@@ -258,8 +253,6 @@ static db_data* copy_data(db_data* data, db_type type, int* value_size) {
  *        - If transaction failed: clear the deletion flag
  */
 size_t invalidate_cache(key_info* key_i, cache_response* v, int value_size, size_t xid) {
-    cache_log(CACHE_DEBUG, "invalidate_cache start xid %d key_i %s", xid, key_i->full_key);
-
     data_version* current_version = get_cache(key_i);
     data_version* t_values_cur_v;
     table_data* t_values;
@@ -268,7 +261,6 @@ size_t invalidate_cache(key_info* key_i, cache_response* v, int value_size, size
     cache_response* prev_v;
 
 
-    cache_log(CACHE_DEBUG, "invalidate_cache current_version %p", current_version);
     if (!current_version) {
         return -1;
     }
@@ -278,11 +270,8 @@ size_t invalidate_cache(key_info* key_i, cache_response* v, int value_size, size
     prev_v = current_version->value;
 
     for (int i = 0; i < v->count_fields; ++i) {
-        cache_log(CACHE_DEBUG, "invalidate_cache v->columns[%d] %p", i, v->columns[i]);
         if (v->columns[i] == NULL) {
             v->columns[i] = prev_v->columns[i];
-            cache_log(CACHE_DEBUG, "type %d", prev_v->columns[i]->type);
-            v->columns[i] = shalloc(v->count_fields * sizeof(cache_attr));
             v->values[i]->data = copy_data(prev_v->values[i]->data, prev_v->columns[i]->type, &value_size);
         }
     }

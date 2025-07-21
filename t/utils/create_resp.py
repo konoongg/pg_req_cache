@@ -6,7 +6,6 @@ def create_resp_req(request):
         resp_message += f"${len(part)}\r\n{part}\r\n"
     return resp_message.encode('utf-8')
 
-
 def create_resp_simple_string(request):
     resp_message = f"+{request}\r\n"
     return resp_message.encode('utf-8')

@@ -153,7 +153,6 @@ void add_trans_event(key_info* key_i, created_cache_respons* res, size_t xid) {
         * takes a unique lock on the cache entry and tries to access the transaction pool.
         * We get a deadlock
         */
-
         inv_unlock(inv);
         inv_lock(inv, read_lock);
     }

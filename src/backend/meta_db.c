@@ -65,18 +65,17 @@ void init_meta_data(void) {
     PGconn* conn;
     char* conn_info;
     const char* query;
+
+    cache_log(CACHE_INFO, "init_meta_data: start init meta db");
+
     conn_info = create_conn_req();
     conn = PQconnectdb(conn_info);
     free(conn_info);
-
-    cache_log(CACHE_DEBUG, "init_meta_data");
 
     shmem_data->meta = meta = shalloc(sizeof(db_meta_data));
 
     query = "SELECT tablename FROM pg_tables WHERE schemaname = 'public';";
 
-
-    cache_log(CACHE_DEBUG, "send %s", query);
     res = PQexec(conn, query);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
         cache_log(CACHE_ERROR, "init db meta data: SELECT failed: %s", PQerrorMessage(conn));
@@ -84,7 +83,7 @@ void init_meta_data(void) {
 
     meta->count_tables = PQntuples(res);
 
-    cache_log(CACHE_DEBUG, "cache find %d tables", meta->count_tables);
+    cache_log(CACHE_INFO, "init_meta_data: find %d tables",  meta->count_tables);
 
 
     meta->tables = shalloc(meta->count_tables * sizeof(table));
@@ -94,6 +93,7 @@ void init_meta_data(void) {
         meta->tables[i].name = shalloc( (name_size + 1) * sizeof(char));
         memcpy(meta->tables[i].name, table_name, name_size);
         meta->tables[i].name[name_size] = '\0';
+        cache_log(CACHE_INFO, "init_meta_data: find table %s",  meta->tables[i].name);
     }
     PQclear(res);
     for (int i = 0; i < meta->count_tables; ++i) {
@@ -131,12 +131,10 @@ void init_meta_data(void) {
             cache_log(CACHE_ERROR,"create_t_info_req: can't create req");
         }
 
-        cache_log(CACHE_DEBUG, "cache find text_oid %s tables",text_oid);
         PQclear(res);
 
         query_t_info = create_t_info_req(t->name);
 
-        cache_log(CACHE_DEBUG, "init meta db: send %s", query_t_info);
         res = PQexec(conn, query_t_info);
         free(query_t_info);
         if (PQresultStatus(res) != PGRES_TUPLES_OK) {
@@ -148,8 +146,6 @@ void init_meta_data(void) {
         if (t->count_column == 0) {
             cache_log(CACHE_ERROR, "init_meta_data table %s don't have column", t->name);
         }
-
-        cache_log(CACHE_DEBUG, "init_meta_data table %s count column %d", t->name, t->count_column);
 
         t->columns = shalloc(t->count_column  * sizeof(column));
         for (int c = 0; c < t->count_column; ++c) {
@@ -210,11 +206,9 @@ column* get_column_info(char* table_name, char* column_name) {
     return NULL;
 }
 
-table* get_table_info(char* table_name) {
-    cache_log(CACHE_DEBUG, "get_table_info meta %p %d", meta, meta->count_tables);
+table* get_table_info_by_name(char* table_name) {
     for (int i = 0; i < meta->count_tables; ++i) {
         table* t  = &(meta->tables[i]);
-        cache_log(CACHE_DEBUG, "get_table_info table_name %s ", t->name);
         if (strcmp(table_name, t->name) == 0) {
             return t;
         }
@@ -223,8 +217,19 @@ table* get_table_info(char* table_name) {
 }
 
 
+table* get_table_info_by_oid(size_t oid) {
+     for (int i = 0; i < meta->count_tables; ++i) {
+        table* t  = &(meta->tables[i]);
+        if (t->oid == oid) {
+            return t;
+        }
+    }
+    return NULL;
+}
+
+
 int get_column_index(char* column_name, char* table_name) {
-    table* t = get_table_info(table_name);
+    table* t = get_table_info_by_name(table_name);
     for (int j = 0; j < t->count_column; ++j) {
         column* c = &(t->columns[j]);
         if (strcmp(column_name, c->column_name) == 0) {
@@ -232,4 +237,20 @@ int get_column_index(char* column_name, char* table_name) {
         }
     }
     return -1;
+}
+
+
+column* get_key_column(size_t table_oid) {
+    table* t = get_table_info_by_oid(table_oid);
+     for (int j = 0; j < t->count_column; ++j) {
+        column* c = &(t->columns[j]);
+        if (c->is_key) {
+            return c;
+        }
+    }
+    return NULL;
+}
+
+bool table_filter(size_t oid) {
+    return get_table_info_by_oid(oid) != NULL;
 }

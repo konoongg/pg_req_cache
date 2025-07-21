@@ -58,7 +58,6 @@ static uint64_t get_current_ms() {
 static bool check_data_valid(ht_data* data) {
     invalid_status inv_status;
 
-    cache_log(CACHE_DEBUG, "check_data_valid daat %p data->xid_inv  %d status %d",data, data->xid_inv, atomic_load(&(data->inv_status)));
     if (data->xid_inv == 0) {
         return true;
     }
@@ -189,7 +188,6 @@ static void free_data_from_ht(hash_table* ht, ht_basket* basket, ht_data* cur_da
 
 static size_t process_inv(hash_table* ht, ht_data* data, size_t new_xid) {
     size_t xid = data->xid_inv;
-    cache_log(CACHE_DEBUG, "process_inv pld_xid %d new_xid %d", xid, new_xid);
     if (xid == 0) {
         return xid;
     } else if (xid == new_xid) {
@@ -285,7 +283,6 @@ void drop_version(data_version* version) {
 }
 
 data_version* get_data(hash_table* ht, find_ht_data* find) {
-    cache_log(CACHE_DEBUG, "get_data start");
     ht_basket* basket;
     ht_data* data;
     void* result = NULL;
@@ -294,13 +291,10 @@ data_version* get_data(hash_table* ht, find_ht_data* find) {
     basket_lock(basket, read_lock);
     data = find_data_in_basket(ht, basket, find->find_key, WITH_TLL);
     if (data != NULL) {
-        cache_log(CACHE_DEBUG, "find data %p", data);
         if (check_data_valid(data)) {
-            cache_log(CACHE_DEBUG, "data valdi");
             result = data->value_cur;
             atomic_fetch_add(&(data->value_cur->usage_counter), 1);
         } else {
-            cache_log(CACHE_DEBUG, "data invalid");
             result = data->inv_value;
             atomic_fetch_add(&(data->inv_value->usage_counter), 1);
         }
@@ -351,8 +345,6 @@ data_version* get_data(hash_table* ht, find_ht_data* find) {
 
 size_t set_invalid_data(hash_table* ht, create_ht_data* new_data, size_t xid) {
 
-    cache_log(CACHE_DEBUG, "set_invalid_data start xid %d", xid);
-
     ht_basket* basket;
     ht_data* data;
     int data_size;
@@ -381,13 +373,6 @@ size_t set_invalid_data(hash_table* ht, create_ht_data* new_data, size_t xid) {
     data->inv_status = UNKNOWN;
     data->xid_inv = xid;
 
-    cache_response* test = data->inv_value->value;
-
-    for (int i = 0; i < test->count_fields; ++i) {
-        cache_attr* attr = &(test->values[0][i]);
-        cache_log(CACHE_DEBUG, "attr %s %d", attr->data->str.str, attr->data->str.size);
-    }
-
     atomic_fetch_add(&(ht->cur_ht_size), data_size);
 
     data->last_time = time(NULL);
@@ -395,14 +380,12 @@ size_t set_invalid_data(hash_table* ht, create_ht_data* new_data, size_t xid) {
         cache_log(CACHE_ERROR, "set_data: time error  %s", strerror(errno));
     }
 
-    cache_log(CACHE_DEBUG, "INVALIDATE data %p xid %d", data, data->xid_inv);
     basket_unlock(basket);
     return old_xid;
 }
 
 
 void set_data(hash_table* ht, create_ht_data* new_data) {
-    cache_log(CACHE_DEBUG, "set_data set");
     ht_basket* basket;
     ht_data* data;
     int data_size;
@@ -440,7 +423,6 @@ void set_data(hash_table* ht, create_ht_data* new_data) {
     }
 
 
-    cache_log(CACHE_DEBUG, "set_data value %p ", new_data->value);
     data->value_cur->value = new_data->value;
     data->value_cur->next = NULL;
     data->value_cur->usage_counter = 0;

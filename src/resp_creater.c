@@ -6,9 +6,10 @@
 #include "postgres.h"
 
 #include "alloc.h"
-#include "connection.h"
 #include "config.h"
+#include "connection.h"
 #include "io.h"
+#include "logger.h"
 #include "resp_creater.h"
 #include "storage_data.h"
 

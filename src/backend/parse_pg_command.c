@@ -85,7 +85,7 @@ static void find_column_value_pare(pg_parse_data* parse, char** command, int ind
     end_value = cur_pos;
     value_size = end_value - start_value;
 
-    if (*start_value = '\'') {
+    if (*start_value == '\'') {
         start_value++;
         value_size -=2;
     }
@@ -110,15 +110,16 @@ static void find_column_value_pare(pg_parse_data* parse, char** command, int ind
     *command = cur_pos;
 }
 
-static void find_set_column (pg_parse_data* parse, char** command) {
-    table* t = get_table_info(parse->table_name);
+static void find_set_column(pg_parse_data* parse, char** command) {
+    table* t = get_table_info_by_name(parse->table_name);
+    int max_count_column;
+    int cur_index = 0;
 
     if (t == NULL) {
         cache_log(CACHE_ERROR, "find_set_column: can't find table withe name %s", parse->table_name);
     }
 
-    int max_count_column = t->count_column;
-    int cur_index = 0;
+    max_count_column = t->count_column;
 
     parse->columns = wcalloc(max_count_column * sizeof(column*));
     parse->value =  wcalloc(max_count_column * sizeof(char*));
@@ -143,6 +144,9 @@ static void find_key_column(pg_parse_data* parse, char** command) {
 pg_parse_data* parse_update(const char* command) {
     pg_parse_data* parse = wcalloc(sizeof(pg_parse_data));
     char* cur_char = (char*)command;
+
+    cache_log(CACHE_DEBUG, "command %s", command);
+
     cur_char += UPDATE_SKIP_SIZE;
     find_table_name(parse, &cur_char);
     cur_char += SET_SKIP_SIZE;

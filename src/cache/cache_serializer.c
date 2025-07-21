@@ -182,7 +182,7 @@ created_cache_respons* create_response_by_pg(PGresult* result, char* table) {
 
 
 created_cache_respons* create_response_by_pg_command(pg_parse_data* req) {
-    table* t = get_table_info(req->table_name);
+    table* t = get_table_info_by_name(req->table_name);
     created_cache_respons* ccr = init_meta_ccr(t->count_column, 1);
     cache_response* res = ccr->res;
 
@@ -198,7 +198,6 @@ created_cache_respons* create_response_by_pg_command(pg_parse_data* req) {
         res->columns[c_index] = c;
 
         res->values[0][c_index].data = shalloc(sizeof(db_data));
-        cache_log(CACHE_DEBUG, "cr commsnd: res->values[0][%d].data %p res %p", c_index, res->values[0][c_index].data, res);
         ccr->size += sizeof(db_data);
         switch (c->type) {
             case INT:
@@ -208,7 +207,7 @@ created_cache_respons* create_response_by_pg_command(pg_parse_data* req) {
                 res->values[0][c_index].data->str.size = req->value_size[i];
                 res->values[0][c_index].data->str.str = shalloc(req->value_size[i] * sizeof(char));
                 ccr->size += res->values[0][c_index].data->str.size * sizeof(char);
-                memcpy(res->values[0][c_index].data->str.str, req->value, req->value_size[i]);
+                memcpy(res->values[0][c_index].data->str.str, req->value[i], req->value_size[i]);
                 break;
         }
     }
@@ -277,6 +276,71 @@ key_info* create_key_info(char* key, int key_size) {
     key_i->value = wcalloc((key_i->value_size + 1) * sizeof(char));
     memcpy(key_i->value, dot_position_s + 1, key_i->value_size);
     key_i->value[key_i->value_size] = '\0';
+
+    return key_i;
+}
+
+key_info* create_key_info_by_record(size_t table_oid, char* record) {
+    key_info* key_i = wcalloc(sizeof(key_info));
+    column* c;
+    table* t;
+    int offset = 0;
+
+    key_i->direct = false;
+    t = get_table_info_by_oid(table_oid);
+    if (t == NULL) {
+        cache_log(CACHE_ERROR, "create_key_info_by_record: wrong table oid %d", table_oid);
+    }
+
+    key_i->table_size = strlen(t->name);
+    key_i->table = wcalloc( (key_i->table_size + 1) * sizeof(char));
+    memcpy(key_i->table, t->name, key_i->table_size);
+    key_i->table[key_i->table_size] = '\0';
+
+    c = get_key_column(table_oid);
+
+    if (c == NULL) {
+        cache_log(CACHE_ERROR, "create_key_info_by_record: wrong table oid %d - can't find key column", table_oid);
+    }
+
+    key_i->column_size = strlen(c->column_name);
+    key_i->column = wcalloc((key_i->column_size + 1) * sizeof(char));
+    memcpy(key_i->column, c->column_name, key_i->column_size);
+    key_i->column[key_i->column_size] = '\0';
+
+    if (record[0] & 1) {
+        key_i->value_size = ((record[0] - 1) >> 1) - 1;
+        key_i->value = wcalloc((key_i->value_size + 1) * sizeof(char));
+        memcpy(key_i->value, record + 1, key_i->column_size);
+        key_i->value[key_i->value_size] = '\0';
+    } else {
+        cache_log(CACHE_WARNING, "create_key_info_by_record: undefined record header size");
+        return NULL;
+    }
+
+
+    key_i->table_column_size = key_i->table_size + 1 + key_i->column_size;
+    key_i->table_column = wcalloc(sizeof(key_i->table_column_size + 1) * sizeof(char));
+    memcpy(key_i->table_column, t->name, key_i->table_size);
+    offset = key_i->table_size;
+    key_i->table_column[offset] = '.';
+    offset++;
+    memcpy(key_i->table_column + offset , c->column_name,  key_i->column_size);
+    key_i->table_column[key_i->table_column_size] = '\0';
+
+    offset = 0;
+    key_i->full_size = key_i->table_size + 1 + key_i->column_size + 1 + key_i->value_size;
+    key_i->full_key = wcalloc((key_i->full_size+ 1) * sizeof(char));
+    memcpy(key_i->full_key, t->name, key_i->table_size);
+    offset += key_i->table_size;
+    key_i->full_key[offset] = '.';
+    offset++;
+    memcpy(key_i->full_key + offset , c->column_name,  key_i->column_size);
+    offset += key_i->column_size;
+    key_i->full_key[offset] = '.';
+    offset++;
+    memcpy(key_i->full_key + offset , key_i->value,  key_i->value_size);
+    key_i->full_key[key_i->full_size] = '\0';
 
     return key_i;
 }

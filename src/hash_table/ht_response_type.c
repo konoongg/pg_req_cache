@@ -72,7 +72,6 @@ void value_free_response(void* data) {
 
      for (int i = 0; i < count_tuples; ++i) {
         for (int j = 0; j < count_field; ++j) {
-            cache_log(CACHE_DEBUG, "value_free_response: v->values[%d][%d].data %p v %p", i, j, v->values[i][j].data, v);
             shfree(v->values[i][j].data);
         }
         shfree(v->values[i]);

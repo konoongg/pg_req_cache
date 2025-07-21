@@ -3,8 +3,9 @@
 
 #include "postgres.h"
 
-#include "executor/executor.h"
+#include "access/heapam.h"
 #include "access/xact.h"
+#include "executor/executor.h"
 #include "fmgr.h"
 #include "miscadmin.h"
 #include "postmaster/bgworker.h"
@@ -41,7 +42,7 @@ shared_struct* shmem_data = NULL;
 static shmem_request_hook_type prev_shmem_request_hook = NULL;
 static shmem_startup_hook_type prev_shmem_startup_hook = NULL;
 static ExecutorFinish_hook_type prev_ExecutorFinish = NULL;
-
+static HeapamUpdate_hook_type prev_HeapamUpdate_hook = NULL;
 void _PG_init(void) {
     register_proxy();
 }
@@ -81,6 +82,27 @@ static void req_cache_ExecutorFinish(QueryDesc* queryDesc) {
     inv_process_command(queryDesc);
 }
 
+static void req_cache_HeapamUpdate(XLogReaderState* record, bool hot_update) {
+    cache_log(CACHE_DEBUG, "req_cache_HeapamUpdate start");
+
+    if (prev_HeapamUpdate_hook) {
+        prev_HeapamUpdate_hook(record, hot_update);
+    } else {
+        cache_log(CACHE_DEBUG, "req_cache_HeapamUpdate  heap_xlog_update start");
+        heap_xlog_update(record, hot_update);
+        cache_log(CACHE_DEBUG, "req_cache_HeapamUpdate  heap_xlog_update finish");
+    }
+
+    cache_log(CACHE_DEBUG, "req_cache_HeapamUpdate  RecoveryInProgress start");
+    if (!RecoveryInProgress()) {
+        return;
+    }
+
+    cache_log(CACHE_DEBUG, "req_cache_HeapamUpdate  RecoveryInProgress finish");
+
+    inv_process_record_update(record);
+}
+
 static void req_cache_xact_cb(XactEvent event, void *arg) {
     inv_process_xact(event, arg);
 }
@@ -105,6 +127,9 @@ static void register_proxy(void) {
 
     prev_ExecutorFinish = ExecutorFinish_hook;
 	ExecutorFinish_hook = req_cache_ExecutorFinish;
+
+    prev_HeapamUpdate_hook = HeapamUpdate_hook;
+    HeapamUpdate_hook = req_cache_HeapamUpdate;
 
     RegisterXactCallback(req_cache_xact_cb, NULL);
 }

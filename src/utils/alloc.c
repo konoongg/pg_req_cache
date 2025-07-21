@@ -130,7 +130,7 @@ static void delete_free_node(free_node* node) {
         assert(node == f_list->start);
         f_list->start = node->next;
     }
-    //cache_log(CACHE_DEBUG, "delete_free_node: node->next %d", node->next);
+
     if (node->next) {
         node->next->prev = node->prev;
     }
@@ -152,7 +152,6 @@ static void* get_free_block(int size) {
             next_node = f_list->start;
         }
 
-        //cache_log(CACHE_DEBUG, "get_free_block: block size %d \n", get_block_size((char*)f_list->cur, FROM_BLOCK_START));
         if (get_block_size((char*)f_list->cur, FROM_BLOCK_START) >= size) {
             free_node* find_node = f_list->cur;
             f_list->cur = next_node;
@@ -179,7 +178,6 @@ static void* shared_allocator_alloc(int size) {
     free_block = get_free_block(size);
 
     if (!free_block) {
-        cache_log(CACHE_DEBUG, "shared_allocator_alloc: can't find memmory block with size %d\n", size);
         err = pthread_mutex_unlock(&(allocator->lock));
         if (err != 0) {
             cache_log(CACHE_ERROR,"shared_allocator_alloc: pthread_mutex_unlock() failed: %s\n", strerror(err));
@@ -265,7 +263,7 @@ static void shared_allocator_free(void* ptr) {
     if (neighbors.left && neighbors.left->is_free) {
         free_node* left_node = (free_node*)((char*)neighbors.left + sizeof(end_mark));
         delete_free_node(left_node);
-        //cache_log(CACHE_DEBUG, "shared_allocator_free left_node %p (neighbors.left)->size %d\n", left_node, (neighbors.left)->size);
+
         free_block = (char*)left_node;
         block_size += (neighbors.left)->size + 2 * sizeof(end_mark);
     }

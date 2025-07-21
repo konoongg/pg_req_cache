@@ -26,7 +26,7 @@ static void defalt_setting_init(void) {
 
     config.worker_conf.backlog_size = 512; // listen socket backlog
     config.worker_conf.buffer_size = 512; // read buffer size
-    config.worker_conf.count_worker = 1;
+    config.worker_conf.count_worker = 4;
     config.worker_conf.listen_port = 6379;
 
     config.db_conf.count_backend = 4; // count libpq backend

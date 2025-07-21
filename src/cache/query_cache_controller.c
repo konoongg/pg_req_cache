@@ -125,8 +125,6 @@ static proc_status process_read_db(connection* conn) {
 
         event_notify(cmd->conn->wthrd->not);
         if (cmd->reason == CACHE_UPDATE) {
-
-            cache_log(CACHE_DEBUG, "cache set from read db");
             set_cache(cmd->key, res->res, res->size, 0);
         }
         free(res);
