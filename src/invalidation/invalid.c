@@ -3,6 +3,7 @@
 #include "access/heapam_xlog.h"
 #include "access/transam.h"
 #include "access/xact.h"
+#include "access/xlog.h"
 #include "executor/executor.h"
 
 #include "cache_serializer.h"
@@ -34,7 +35,7 @@ void inv_process_command(QueryDesc* queryDesc) {
             key_info* key_i = create_key_info_by_pg_command(req);
             created_cache_respons* res = create_response_by_pg_command(req);
 
-            add_trans_event(key_i, res, get_xid_from_querydesc(queryDesc));
+            add_trans_event(key_i, res, get_xid_from_querydesc(queryDesc), false);
 
             free(res);
             destroy_key_info(key_i);
@@ -52,20 +53,25 @@ void inv_process_record_update(XLogReaderState* xlogreader) {
     RelFileLocator rlocator;
     key_info* key_i;
     char* recdata;
+    created_cache_respons* res;
+    size_t data_size;
 
-    cache_log(CACHE_DEBUG, "inv_process_record_update start");
+    /*
+    * if shared memory is not initialized,
+    * it means that the kzhsh is not yet ready to accept requests,
+    * which means there is nothing to invalidate
+    */
+    if  (!load_shared_struct()) {
+        return;
+    }
 
-    cache_log(CACHE_DEBUG, "inv_process_record_update load_shared_struct start");
-    load_shared_struct();
-    cache_log(CACHE_DEBUG, "inv_process_record_update XLogRecGetBlockTag start");
     XLogRecGetBlockTag(xlogreader, 0, &rlocator, NULL, NULL);
-    cache_log(CACHE_DEBUG, "inv_process_record_update XLogRecGetBlockTag finish");
 
     if (!table_filter(rlocator.relNumber)) {
         return;
     }
 
-    recdata = XLogRecGetBlockData(xlogreader, 0, NULL);
+    recdata = XLogRecGetBlockData(xlogreader, 0, &data_size);
     if (recdata == NULL) {
         cache_log(CACHE_WARNING, "can't read wal data");
         return;
@@ -76,38 +82,55 @@ void inv_process_record_update(XLogReaderState* xlogreader) {
 
     if (xlrec->flags & XLH_UPDATE_PREFIX_FROM_OLD) {
 		recdata += sizeof(uint16);
+        data_size -= sizeof(uint16);
 	}
 
 	if (xlrec->flags & XLH_UPDATE_SUFFIX_FROM_OLD) {
 		recdata += sizeof(uint16);
+        data_size -= sizeof(uint16);
 	}
 
 	recdata += SizeOfHeapHeader;
+    data_size -= SizeOfHeapHeader;
 
     recdata += SKIP_BYTE;
+    data_size -= SKIP_BYTE;
 
     key_i = create_key_info_by_record(rlocator.relNumber, recdata);
 
-    if (key_i) {
-        cache_log(CACHE_DEBUG, "process_record_update: key %s", key_i->full_key);
-    }
+    res = create_respons_by_xlog(recdata, data_size, rlocator.relNumber);
 
+    add_trans_event(key_i, res, XLogRecGetXid(xlogreader), true);
+
+    cache_log(CACHE_DEBUG, "inv_process_record_update add inv %d", XLogRecGetXid(xlogreader));
+    free(res);
     destroy_key_info(key_i);
 }
 
-void inv_process_xact(XactEvent event, void* arg) {
-    cache_log(CACHE_DEBUG, "inv_process_xact: start");
+void inv_process_xac_commit(XLogReaderState* xlogreader) {
+    cache_log(CACHE_DEBUG, "inv_process_xac_commit xid  %d", XLogRecGetXid(xlogreader));
 
+    if (!load_shared_struct()) {
+        return;
+    }
+
+    process_apply(XLogRecGetXid(xlogreader));
+}
+
+void inv_process_xact(XactEvent event, void* arg) {
+    TransactionId xid;
     if (RecoveryInProgress()) {
         return;
     }
 
-    TransactionId xid = GetCurrentTransactionIdIfValid();
+    xid = GetCurrentTransactionIdIfValid();
     if (xid == InvalidTransactionId) {
         return;
     }
 
-    load_shared_struct();
+    if (!load_shared_struct()) {
+        return;
+    }
 
     switch (event) {
         case (XACT_EVENT_COMMIT):

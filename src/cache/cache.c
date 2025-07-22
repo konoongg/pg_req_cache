@@ -252,29 +252,29 @@ static db_data* copy_data(db_data* data, db_type type, int* value_size) {
  *        - If transaction succeeded: delete data (like expired TTL handling)
  *        - If transaction failed: clear the deletion flag
  */
-size_t invalidate_cache(key_info* key_i, cache_response* v, int value_size, size_t xid) {
+size_t invalidate_cache(key_info* key_i, cache_response* v, int value_size, size_t xid, bool is_full_v) {
     data_version* current_version = get_cache(key_i);
     data_version* t_values_cur_v;
     table_data* t_values;
     create_ht_data new_value_data;
     size_t prev_inv_xid;
-    cache_response* prev_v;
-
 
     if (!current_version) {
         return -1;
     }
 
-    t_values_cur_v = get_or_create_table(key_i);
-    t_values = t_values_cur_v->value;
-    prev_v = current_version->value;
-
-    for (int i = 0; i < v->count_fields; ++i) {
-        if (v->columns[i] == NULL) {
-            v->columns[i] = prev_v->columns[i];
-            v->values[i]->data = copy_data(prev_v->values[i]->data, prev_v->columns[i]->type, &value_size);
+    if (!is_full_v) {
+        cache_response*  prev_v = current_version->value;
+        for (int i = 0; i < v->count_fields; ++i) {
+            if (v->columns[i] == NULL) {
+                v->columns[i] = prev_v->columns[i];
+                v->values[i]->data = copy_data(prev_v->values[i]->data, prev_v->columns[i]->type, &value_size);
+            }
         }
     }
+
+    t_values_cur_v = get_or_create_table(key_i);
+    t_values = t_values_cur_v->value;
 
     new_value_data = prepare_value(key_i, v, value_size, t_values->uniq_num, 0);
     prev_inv_xid = set_invalid_data(c->values, &new_value_data, xid);

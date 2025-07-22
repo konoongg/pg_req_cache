@@ -68,7 +68,6 @@ def restart_cluster(timeout: int = 100):
         ["pg_ctl", "-D", "replica/data", "stop", "-m", "immediate"],
 
         ["pg_ctl", "-D", "master/data", "-l", "master/logfile", "start"],
-        ["sleep", "5"],
         ["pg_ctl", "-D", "replica/data", "-l", "replica/logfile", "start"],
     ]
 
@@ -86,7 +85,7 @@ def restart_cluster(timeout: int = 100):
             pytest.fail(f"Команда {cmd} не завершилась за {timeout} секунд")
         except subprocess.CalledProcessError as e:
             pass
-    time.sleep(1)
+    time.sleep(2)
 
 
 def restart_postgres():

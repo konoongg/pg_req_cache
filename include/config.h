@@ -15,6 +15,7 @@ typedef struct init_worker_conf init_worker_conf;
 typedef struct proto_conf proto_conf;
 
 void init_config(void);
+void init_guc_config(void);
 
 
 struct init_worker_conf {

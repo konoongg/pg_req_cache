@@ -43,6 +43,7 @@ static shmem_request_hook_type prev_shmem_request_hook = NULL;
 static shmem_startup_hook_type prev_shmem_startup_hook = NULL;
 static ExecutorFinish_hook_type prev_ExecutorFinish = NULL;
 static HeapamUpdate_hook_type prev_HeapamUpdate_hook = NULL;
+static XactCommit_hook_type prev_XactCommit_hook = NULL;
 void _PG_init(void) {
     register_proxy();
 }
@@ -82,25 +83,34 @@ static void req_cache_ExecutorFinish(QueryDesc* queryDesc) {
     inv_process_command(queryDesc);
 }
 
-static void req_cache_HeapamUpdate(XLogReaderState* record, bool hot_update) {
-    cache_log(CACHE_DEBUG, "req_cache_HeapamUpdate start");
 
+static void req_cache_HeapamUpdate(XLogReaderState* record, bool hot_update) {
     if (prev_HeapamUpdate_hook) {
         prev_HeapamUpdate_hook(record, hot_update);
     } else {
-        cache_log(CACHE_DEBUG, "req_cache_HeapamUpdate  heap_xlog_update start");
         heap_xlog_update(record, hot_update);
-        cache_log(CACHE_DEBUG, "req_cache_HeapamUpdate  heap_xlog_update finish");
     }
 
-    cache_log(CACHE_DEBUG, "req_cache_HeapamUpdate  RecoveryInProgress start");
     if (!RecoveryInProgress()) {
         return;
     }
 
-    cache_log(CACHE_DEBUG, "req_cache_HeapamUpdate  RecoveryInProgress finish");
 
     inv_process_record_update(record);
+}
+
+static void req_cache_XactCommit(XLogReaderState* record) {
+    if (prev_XactCommit_hook) {
+        prev_XactCommit_hook(record);
+    } else {
+        xact_commit(record);
+    }
+
+    if (!RecoveryInProgress()) {
+        return;
+    }
+
+    inv_process_xac_commit(record);
 }
 
 static void req_cache_xact_cb(XactEvent event, void *arg) {
@@ -131,6 +141,9 @@ static void register_proxy(void) {
     prev_HeapamUpdate_hook = HeapamUpdate_hook;
     HeapamUpdate_hook = req_cache_HeapamUpdate;
 
+    prev_XactCommit_hook = XactCommit_hook;
+    XactCommit_hook = req_cache_XactCommit;
+
     RegisterXactCallback(req_cache_xact_cb, NULL);
 }
 
@@ -144,6 +157,10 @@ void proxy_start_work(Datum main_arg) {
 
     init_shmem();
     cache_log(CACHE_INFO, "finish init shmem struct");
+
+    init_guc_config();
+    cache_log(CACHE_INFO, "finish init guc config");
+
 
     init_shared_allocator(shmem_data + sizeof(shared_struct), config.c_conf.max_storage_size);
     cache_log(CACHE_INFO, "finish init allocator");

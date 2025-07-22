@@ -118,14 +118,14 @@ trans_status check_trans_status(size_t xid) {
     return status;
 }
 
-void add_trans_event(key_info* key_i, created_cache_respons* res, size_t xid) {
+void add_trans_event(key_info* key_i, created_cache_respons* res, size_t xid, bool is_fuul_v) {
     int index =  xid % INVALIDATE_XID_POOL_SIZE;
     invalidate* inv = &(cache_inv->trans_pool[index]);
     trans_invalidate* cur_trans;
     size_t old_xid = 0;
 
     inv_lock(inv, read_lock);
-
+    cache_log(CACHE_DEBUG, "add_trans_event xid %ld", xid);
     cur_trans = find_trans_by_xid(inv, xid) ;
     if (!cur_trans) {
         inv_unlock(inv);
@@ -160,7 +160,7 @@ void add_trans_event(key_info* key_i, created_cache_respons* res, size_t xid) {
     //the order of operations is this way because we want
     //that if the structure of the cache data contains information about a transaction,
     //then the structures describing these transactions already exist
-    old_xid = invalidate_cache(key_i, res->res, res->size, xid);
+    old_xid = invalidate_cache(key_i, res->res, res->size, xid, is_fuul_v);
     if (old_xid != -1) {
         atomic_fetch_add(&(cur_trans->counter), 1);
     }
@@ -185,16 +185,14 @@ void process_apply(size_t xid) {
     invalidate* inv;
     trans_invalidate* cur;
 
-    if (!cache_inv) {
-        return;
-    }
-
     index = xid % INVALIDATE_XID_POOL_SIZE;
     inv = &(cache_inv->trans_pool[index]);
 
     inv_lock(inv, write_lock);
 
     cur = find_trans_by_xid(inv, xid);
+
+    cache_log(CACHE_DEBUG, "process_apply: cur %p", cur);
 
     if (cur) {
         delete_trans(cur);

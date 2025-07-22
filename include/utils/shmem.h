@@ -1,6 +1,8 @@
 #ifndef REQ_CACHE_SHMEM_H
 #define REQ_CACHE_SHMEM_H
 
+#include <stdbool.h>
+
 #include "cache.h"
 #include "invalid_trans.h"
 #include "meta_db.h"
@@ -9,7 +11,7 @@ typedef struct shared_allocator shared_allocator;
 typedef struct shared_struct shared_struct;
 
 void init_shmem(void);
-void load_shared_struct(void);
+bool load_shared_struct(void);
 
 struct shared_allocator {
     void* mem;

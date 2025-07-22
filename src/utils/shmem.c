@@ -27,9 +27,16 @@ void init_shmem(void) {
     }
 }
 
-void load_shared_struct(void) {
+bool load_shared_struct(void) {
     if (load_shmem_data) {
-        return;
+        return load_shmem_data;
+    }
+
+    cache_log(CACHE_INFO, "shared strcut loaded");
+
+    if (!shmem_data->meta || !shmem_data->c || !shmem_data->cache_inv) {
+        cache_log(CACHE_WARNING, "try to load shmenm, but it hasn,t initialized");
+        return load_shmem_data;
     }
 
     allocator = &(shmem_data->allocator);
@@ -37,5 +44,7 @@ void load_shared_struct(void) {
     cache_inv = shmem_data->cache_inv;
     meta = shmem_data->meta;
     load_shmem_data = true;
+
+    return load_shmem_data;
 }
 

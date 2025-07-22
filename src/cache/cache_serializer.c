@@ -180,6 +180,32 @@ created_cache_respons* create_response_by_pg(PGresult* result, char* table) {
     return ccr;
 }
 
+created_cache_respons* create_respons_by_xlog(char* record, int record_size, size_t table_oid) {
+    table* t = get_table_info_by_oid(table_oid);
+    created_cache_respons* ccr = init_meta_ccr(t->count_column, 1);
+    cache_response* res = ccr->res;
+
+    int cur_pos = 0;
+    int cur_count_attr = 0;
+    res->values[0] = shalloc(res->count_fields * sizeof(cache_attr));
+    while (cur_pos < record_size) {
+        res->values[0][cur_count_attr].data = shalloc(sizeof(db_data));
+        if (record[cur_pos] & 1 ) {
+            int value_size = ((record[cur_pos] - 1) >> 1) - 1;
+            cur_pos +=  1;
+
+            res->columns[cur_count_attr] = get_column_info(t->name, (t->columns)[cur_count_attr].column_name);
+
+            res->values[0][cur_count_attr].data->str.size = value_size;
+            res->values[0][cur_count_attr].data->str.str = shalloc(value_size * sizeof(char));
+            ccr->size += res->values[0][cur_count_attr].data->str.size * sizeof(char);
+            memcpy(res->values[0][cur_count_attr].data->str.str, record + cur_pos, value_size);
+            cur_pos += value_size;
+            cur_count_attr++;
+        }
+    }
+    return ccr;
+}
 
 created_cache_respons* create_response_by_pg_command(pg_parse_data* req) {
     table* t = get_table_info_by_name(req->table_name);
@@ -314,8 +340,7 @@ key_info* create_key_info_by_record(size_t table_oid, char* record) {
         memcpy(key_i->value, record + 1, key_i->column_size);
         key_i->value[key_i->value_size] = '\0';
     } else {
-        cache_log(CACHE_WARNING, "create_key_info_by_record: undefined record header size");
-        return NULL;
+        cache_log(CACHE_ERROR, "create_key_info_by_record: undefined record header size");
     }
 
 

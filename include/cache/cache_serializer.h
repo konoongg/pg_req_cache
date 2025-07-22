@@ -8,6 +8,7 @@
 
 typedef struct key_info key_info;
 
+created_cache_respons* create_respons_by_xlog(char* record, int record_size, size_t table_oid);
 created_cache_respons* create_response_by_pg_command(pg_parse_data* req);
 created_cache_respons* create_response_by_pg(PGresult* result, char* table);
 created_cache_respons* create_response_by_resp(char* table, char* value, int value_size);

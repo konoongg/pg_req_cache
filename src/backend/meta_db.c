@@ -66,7 +66,7 @@ void init_meta_data(void) {
     char* conn_info;
     const char* query;
 
-    cache_log(CACHE_INFO, "init_meta_data: start init meta db");
+    cache_log(CACHE_INFO , "start init meta data");
 
     conn_info = create_conn_req();
     conn = PQconnectdb(conn_info);

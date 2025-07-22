@@ -323,6 +323,9 @@ void init_workers(void) {
         }
     }
 
+
+    cache_log(CACHE_INFO, "req cache ready to accept connections");
+
     for (int i = 0; i < conf.count_worker; ++i) {
         int err = pthread_join(tids[i], NULL);
         if (err) {

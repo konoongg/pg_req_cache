@@ -16,7 +16,7 @@
 typedef struct cache cache;
 
 data_version* get_cache(key_info* key_i);
-size_t invalidate_cache(key_info* key_i, cache_response* v, int value_size, size_t xid);
+size_t invalidate_cache(key_info* key_i, cache_response* v, int value_size, size_t xid, bool is_full_v);
 int delete_cache(key_info* key_i);
 size_t get_cur_cache_size(void);
 void cache_clean(int del_time_s);

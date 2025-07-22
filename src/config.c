@@ -39,22 +39,24 @@ static void defalt_setting_init(void) {
     config.is_replica = false;
 }
 
+void init_guc_config(void) {
+    DefineCustomIntVariable("pg_req_cache.port",
+	 						"port for cache",
+	 						NULL,
+	 						&(config.worker_conf.listen_port),
+							6379,
+							1024, 49151,
+							PGC_USERSET,
+	 						0,
+							NULL,
+	 						NULL,
+	 						NULL);
+
+    MarkGUCPrefixReserved("pg_req_cache");
+}
+
 // Initialize the config value from the corresponding file.
 // If the file does not exist, set the default value for all config parameters.
 void init_config(void) {
     defalt_setting_init();
-
-    // DefineCustomIntVariable("pg_req_cache.port",
-	// 						"port for cache",
-	// 						NULL,
-	// 						&(config.worker_conf.listen_port),
-	// 						6379,
-	// 						1024, 49151,
-	// 						PGC_USERSET,
-	// 						0,
-	// 						NULL,
-	// 						NULL,
-	// 						NULL);
-
-    // MarkGUCPrefixReserved("pg_req_cache");
 }
