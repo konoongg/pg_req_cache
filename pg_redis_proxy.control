@@ -1,5 +1,5 @@
 #pg_redis_proxy extension
 comment = 'proxy Redis - Postgres'
-default_version = '1.0'
+default_version = '1.1'
 module_pathname = '$libdir/pg_redis_proxy'
 relocatable = true
